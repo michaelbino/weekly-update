@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { font-family: Arial, sans-serif; font-size: 13px; color: #222; padding: 4px 12px 24px; }
+  label { display: block; margin: 12px 0 4px; font-weight: bold; }
+  small { display: block; color: #666; font-weight: normal; margin-top: 2px; }
+  input[type=text], input[type=url] { width: 100%; box-sizing: border-box; padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+  input[type=color] { width: 48px; height: 28px; border: 1px solid #ccc; padding: 0; vertical-align: middle; }
+  .row { display: flex; gap: 10px; }
+  .row > div { flex: 1; }
+  h3 { margin: 20px 0 4px; font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: #555; border-bottom: 1px solid #eee; padding-bottom: 4px; }
+  button { margin-top: 18px; padding: 8px 16px; border: 0; border-radius: 4px; background: #1a73e8; color: #fff; font: inherit; cursor: pointer; }
+  #status { margin-left: 8px; color: #188038; }
+</style>
+</head>
+<body>
+<p><small>Saved in “Newsletter settings.json” next to this Doc, so every issue in this folder uses them.</small></p>
+<form id="f" onsubmit="save(event)">
+  <h3>Email</h3>
+  <label>Sender name<input type="text" name="senderName" value="<?= config.senderName ?>"></label>
+  <label>Reply-to address<input type="text" name="replyTo" value="<?= config.replyTo ?>"></label>
+  <label>Subject<small>Blank = the Doc’s file name</small><input type="text" name="subject" value="<?= config.subject ?>"></label>
+  <label>Preview text<small>Shown after the subject in the inbox. Blank = Title + Subtitle</small><input type="text" name="preheader" value="<?= config.preheader ?>"></label>
+  <label>View in browser link<small>Blank = this Doc’s published web version</small><input type="url" name="viewInBrowserUrl" value="<?= config.viewInBrowserUrl ?>"></label>
+
+  <h3>Look</h3>
+  <div class="row">
+    <div><label>Accent<input type="color" name="accentColor" value="<?= config.accentColor ?>"></label></div>
+    <div><label>On accent<input type="color" name="accentTextColor" value="<?= config.accentTextColor ?>"></label></div>
+    <div><label>Links<input type="color" name="linkColor" value="<?= config.linkColor ?>"></label></div>
+  </div>
+  <label>Background photo URL<small>Optional seasonal image behind the newsletter</small><input type="url" name="backgroundImageUrl" value="<?= config.backgroundImageUrl ?>"></label>
+  <label><input type="checkbox" name="autoDividers" <?= config.autoDividers ? 'checked' : '' ?>> Divider line before each Heading 1</label>
+
+  <h3>Footer</h3>
+  <label>Name<input type="text" name="footerName" value="<?= config.footerName ?>"></label>
+  <label>Tagline<input type="text" name="footerTagline" value="<?= config.footerTagline ?>"></label>
+  <label>Logo URL<input type="url" name="footerLogoUrl" value="<?= config.footerLogoUrl ?>"></label>
+  <label>Small print<input type="text" name="footerNote" value="<?= config.footerNote ?>"></label>
+
+  <button type="submit">Save</button><span id="status"></span>
+</form>
+<script>
+  function save(e) {
+    e.preventDefault();
+    var f = document.getElementById('f');
+    var values = {};
+    Array.prototype.forEach.call(f.elements, function (el) {
+      if (!el.name) return;
+      values[el.name] = el.type === 'checkbox' ? el.checked : el.value.trim();
+    });
+    document.getElementById('status').textContent = 'Saving…';
+    google.script.run
+      .withSuccessHandler(function () { document.getElementById('status').textContent = 'Saved'; })
+      .withFailureHandler(function (err) { document.getElementById('status').textContent = err.message; })
+      .saveSettings(values);
+  }
+</script>
+</body>
+</html>

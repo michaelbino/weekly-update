@@ -1,0 +1,5 @@
+.git
+out
+node_modules
+.deploy.env
+example.eml

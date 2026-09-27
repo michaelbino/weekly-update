@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<style>
+  body { margin: 0; font-family: Arial, sans-serif; font-size: 13px; color: #222; }
+  .bar { display: flex; gap: 8px; align-items: center; padding: 8px 4px 10px; flex-wrap: wrap; }
+  .subject { flex: 1; min-width: 200px; font-weight: bold; }
+  button { font: inherit; padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; background: #fff; cursor: pointer; }
+  button.on { background: #1a73e8; border-color: #1a73e8; color: #fff; }
+  .warn { background: #fff4e5; border: 1px solid #f0c36d; border-radius: 4px; padding: 6px 10px; margin: 0 4px 8px; }
+  .stage { background: #e8eaed; padding: 12px; height: 560px; overflow: auto; text-align: center; }
+  iframe { border: 0; background: #fff; height: 100%; width: 100%; max-width: 100%; transition: width .2s; box-shadow: 0 1px 4px rgba(0,0,0,.2); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <div class="subject">Subject: <?= subject ?></div>
+    <button id="desk" class="on" onclick="size(760, this)">Desktop</button>
+    <button id="mob" onclick="size(375, this)">Phone</button>
+    <button onclick="copyHtml(this)">Copy HTML</button>
+    <button onclick="send(this)">Send preview to me</button>
+  </div>
+  <? for (var i = 0; i < warnings.length; i++) { ?>
+    <div class="warn"><?= warnings[i] ?></div>
+  <? } ?>
+  <div class="stage"><iframe id="f" style="width:760px"></iframe></div>
+  <textarea id="src" style="position:absolute;left:-9999px"><?= html ?></textarea>
+<script>
+  var src = document.getElementById('src').value;
+  document.getElementById('f').srcdoc = src;
+  function size(w, btn) {
+    document.getElementById('f').style.width = w + 'px';
+    document.querySelectorAll('.bar button').forEach(function (b) { b.classList.remove('on'); });
+    btn.classList.add('on');
+  }
+  function copyHtml(btn) {
+    var t = document.getElementById('src'); t.select(); document.execCommand('copy');
+    btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy HTML'; }, 1500);
+  }
+  function send(btn) {
+    btn.disabled = true; btn.textContent = 'Sending…';
+    google.script.run
+      .withSuccessHandler(function () { google.script.host.close(); })
+      .withFailureHandler(function (e) { btn.disabled = false; btn.textContent = 'Send preview to me'; alert(e.message); })
+      .sendPreviewToMe();
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+node_modules/
+out/
+.deploy.env
+.DS_Store
+apps-script/Deployment.js
+example.eml

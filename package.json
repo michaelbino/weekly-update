@@ -1,0 +1,13 @@
+{
+  "name": "weekly-update-newsletter",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Google Doc -> responsive email newsletter (Apps Script + gws CLI)",
+  "license": "MIT",
+  "bin": { "newsletter": "cli/newsletter.mjs" },
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test test/",
+    "render": "node cli/newsletter.mjs render --json test/fixtures/template-doc.json --out out"
+  }
+}

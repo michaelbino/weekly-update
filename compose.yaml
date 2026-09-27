@@ -1,0 +1,9 @@
+services:
+  test:
+    build: .
+    command: npm test
+  render:
+    build: .
+    command: npm run render
+    volumes:
+      - ./out:/app/out
