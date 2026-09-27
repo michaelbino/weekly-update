@@ -1,5 +1,7 @@
 # Weekly Update newsletter
 
+**Project page with screenshots:** https://michaelbino.github.io/weekly-update/
+
 Write the weekly newsletter in a Google Doc. Send yourself a responsive HTML email that matches `example.eml`: coloured header band, centred section headings, red dividers, full-width flyers, download cards and a footer band. The email's **View in browser** link opens a public web page that looks exactly like the email.
 
 ```
@@ -86,6 +88,7 @@ apps-script/   Config.js (brand defaults), Newsletter.js (pure engine), Code.js 
 cli/           newsletter.mjs (render/send/seed), mime.mjs, seed.mjs, gws.mjs
 template/      weekly-update.html (seed content from example.eml), placeholder-attachment.pdf
 test/          node:test suites; fixtures are real Docs API responses of the template
+docs/          GitHub Pages site (index.html + screenshots)
 ```
 
 `Newsletter.js` uses no Google services, so the tests load it directly in Node. They run `Code.js` in a VM with mocked `DocumentApp`, `DriveApp`, `MailApp` and the other services it calls.

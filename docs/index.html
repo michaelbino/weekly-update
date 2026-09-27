@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Update — Google Docs to email newsletter</title>
+<meta name="description" content="Write a school newsletter in Google Docs and send a responsive, email-safe newsletter with a matching web version. Free, open source, runs on Google Apps Script.">
+<meta property="og:title" content="Weekly Update — Google Docs to email newsletter">
+<meta property="og:description" content="Write in Google Docs. Send a polished, phone-friendly newsletter. No subscription.">
+<meta property="og:image" content="img/email-desktop.jpg">
+<style>
+  :root {
+    --bg: #fbfaf8; --surface: #ffffff; --ink: #1d1b19; --muted: #5f5a54; --line: #e6e1da;
+    --accent: #c73a3a; --accent-ink: #fff4c2; --accent-soft: #fbeaea; --link: #1c6e98;
+    --code-bg: #f3f0eb; --shadow: 0 1px 2px rgba(0,0,0,.06), 0 8px 28px rgba(0,0,0,.08);
+    --serif: Georgia, 'Times New Roman', serif;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161412; --surface: #1f1c1a; --ink: #f1ede7; --muted: #aaa39a; --line: #34302c;
+      --accent: #e0605b; --accent-soft: #3a2220; --link: #6cb6dc; --code-bg: #26221f;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 17px/1.6 var(--sans); }
+  a { color: var(--link); }
+  img { max-width: 100%; height: auto; display: block; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+  h1, h2, h3 { font-family: var(--serif); line-height: 1.2; margin: 0 0 .5em; }
+  h2 { font-size: clamp(26px, 4vw, 34px); }
+  h3 { font-size: 20px; }
+  p { margin: 0 0 1em; }
+  code { font-family: var(--mono); font-size: .88em; background: var(--code-bg); padding: .1em .35em; border-radius: 4px; }
+  pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line);
+        border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 0 0 1em; }
+  section { padding: 64px 0; border-top: 1px solid var(--line); }
+  .lede { font-size: 19px; color: var(--muted); max-width: 720px; }
+  .kicker { font: 600 13px/1 var(--sans); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+
+  /* Hero */
+  header.hero { background: var(--accent); color: var(--accent-ink); padding: 72px 0 0; overflow: hidden; }
+  .hero h1 { font-size: clamp(40px, 7vw, 68px); margin-bottom: 14px; }
+  .hero p { font-size: clamp(18px, 2.4vw, 21px); max-width: 640px; color: #fff; opacity: .95; }
+  .hero .actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 26px 0 44px; }
+  .btn { display: inline-block; padding: 11px 20px; border-radius: 8px; font-weight: 600; text-decoration: none; font-size: 16px; }
+  .btn.solid { background: var(--accent-ink); color: #7a1f1f; }
+  .btn.ghost { border: 1.5px solid rgba(255,255,255,.7); color: #fff; }
+  .hero-shots { display: grid; grid-template-columns: 1.15fr 1fr; gap: 22px; align-items: end; }
+  .hero-shots figure { margin: 0; background: #fff; border-radius: 12px 12px 0 0; box-shadow: 0 -2px 30px rgba(0,0,0,.25); overflow: hidden; }
+  .hero-shots img { height: 380px; width: 100%; object-fit: cover; object-position: top; }
+  .hero-shots figcaption { font-size: 13px; padding: 8px 12px; color: #5f5a54; background: #f6f3ee; }
+
+  /* Steps */
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 28px; counter-reset: step; }
+  .step { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .step::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 30px; height: 30px;
+                  border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; margin-bottom: 10px; }
+  .step h3 { font-family: var(--sans); font-size: 17px; margin-bottom: 6px; }
+  .step p { font-size: 15px; color: var(--muted); margin: 0; }
+
+  /* Figures */
+  figure { margin: 0; }
+  .steps > *, .compare > *, .trio > *, .menu-grid > *, .ui-shots > *, .formats > *, .split > *, .hero-shots > * { min-width: 0; }
+  .shot { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
+  .shot img { width: 100%; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 10px; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; align-items: start; }
+  .compare .label { font: 600 13px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .tall img { max-height: 760px; object-fit: cover; object-position: top; }
+  .trio { display: grid; grid-template-columns: 1.3fr .8fr 1.3fr; gap: 24px; margin-top: 28px; align-items: start; }
+
+  /* Mapping table */
+  table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 16px; background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { background: var(--code-bg); font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  tr:last-child td { border-bottom: 0; }
+  td:first-child { font-weight: 600; width: 38%; }
+
+  /* Menu illustration */
+  .menu-grid { display: grid; grid-template-columns: 340px 1fr; gap: 36px; margin-top: 28px; align-items: start; }
+  .gmenu { background: #fff; color: #202124; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,.15), 0 8px 24px rgba(0,0,0,.12);
+           padding: 6px 0; font: 14px/1 Arial, sans-serif; position: sticky; top: 20px; }
+  .gmenu .bar { display: flex; gap: 16px; padding: 8px 14px 12px; border-bottom: 1px solid #e0e0e0; color: #444; font-size: 13.5px; }
+  .gmenu .bar b { background: #e8f0fe; color: #1a56c4; padding: 4px 8px; border-radius: 4px; margin: -4px -8px; }
+  .gmenu ul { list-style: none; margin: 6px 0 0; padding: 0; }
+  .gmenu li { padding: 9px 18px; }
+  .gmenu li.sep { padding: 0; margin: 6px 0; border-top: 1px solid #e0e0e0; }
+  .gmenu li:not(.sep):hover { background: #f1f3f4; }
+  .gmenu-note { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  dl.items { margin: 0; }
+  dl.items dt { font-weight: 700; margin-top: 18px; }
+  dl.items dt:first-child { margin-top: 0; }
+  dl.items dd { margin: 4px 0 0; color: var(--muted); }
+  .ui-shots { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 22px; margin-top: 40px; align-items: start; }
+  .ui-shots .stack { display: grid; gap: 22px; }
+
+  /* Formats */
+  .formats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 22px; margin-top: 28px; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 22px; }
+  .card h3 { font-family: var(--sans); font-size: 18px; }
+  .card p { color: var(--muted); font-size: 15.5px; }
+  .card pre { max-height: 300px; margin-top: 12px; }
+
+  /* Pros / cons */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; margin-top: 28px; }
+  .list { list-style: none; margin: 0; padding: 0; }
+  .list li { position: relative; padding: 12px 0 12px 34px; border-bottom: 1px solid var(--line); }
+  .list li:last-child { border-bottom: 0; }
+  .list li::before { position: absolute; left: 0; top: 11px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; }
+  .pros li::before { content: '✓'; background: #e3f3e8; color: #1e7a3c; }
+  .cons li::before { content: '–'; background: var(--accent-soft); color: var(--accent); }
+  .list b { display: block; }
+  .list span { color: var(--muted); font-size: 15.5px; }
+  .callout { background: var(--accent-soft); border-left: 4px solid var(--accent); padding: 14px 18px; border-radius: 6px; margin-top: 24px; font-size: 16px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0 48px; color: var(--muted); font-size: 14px; }
+
+  @media (max-width: 900px) {
+    .steps { grid-template-columns: 1fr 1fr; }
+    .trio, .ui-shots { grid-template-columns: 1fr 1fr; }
+    .trio figure:first-child, .ui-shots figure:first-child { grid-column: 1 / -1; }
+    .menu-grid { grid-template-columns: 1fr; }
+    .gmenu { position: static; max-width: 360px; }
+  }
+  @media (max-width: 640px) {
+    body { font-size: 16px; }
+    section { padding: 48px 0; }
+    .hero-shots, .compare, .formats, .split, .steps, .trio, .ui-shots { grid-template-columns: 1fr; }
+    .hero-shots figure:last-child { display: none; }
+    .hero-shots img { height: 260px; }
+    td:first-child { width: auto; }
+    th, td { padding: 10px 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="kicker" style="color:var(--accent-ink);opacity:.85">Open source · Google Apps Script</div>
+    <h1>The Weekly Update</h1>
+    <p>Write your school newsletter in Google Docs. Send a polished, phone-friendly email and a matching web page, straight from the Doc's own menu.</p>
+    <div class="actions">
+      <a class="btn solid" href="https://github.com/michaelbino/weekly-update">View on GitHub</a>
+      <a class="btn ghost" href="#setup">Set it up</a>
+    </div>
+    <div class="hero-shots">
+      <figure><img src="img/email-desktop.jpg" width="1000" height="1650" alt="The rendered newsletter email: red header band reading The Weekly Update, centred serif section headings and red dividers"><figcaption>The email your readers get</figcaption></figure>
+      <figure><img src="img/doc-page.jpg" width="900" height="1164" alt="The same content as a plain Google Doc page with Title, Subtitle and Heading styles"><figcaption>The Google Doc your editor writes</figcaption></figure>
+    </div>
+  </div>
+</header>
+
+<main>
+<section id="how">
+  <div class="wrap">
+    <div class="kicker">How it works</div>
+    <h2>A Google Doc in, a newsletter out</h2>
+    <p class="lede">A script attached to the template Doc reads it through the Google Docs API. It turns your headings, text, lists, images and file links into an email that works in Gmail, Apple Mail and Outlook.</p>
+    <div class="steps">
+      <div class="step"><h3>Start the issue</h3><p><b>Newsletter › Start next issue</b> copies last week's Doc and updates the date.</p></div>
+      <div class="step"><h3>Write</h3><p>Edit it like any Doc, together with co-editors, using comments, suggestions and version history.</p></div>
+      <div class="step"><h3>Publish</h3><p><b>Publish web version</b> creates the public page that “View in browser” opens.</p></div>
+      <div class="step"><h3>Review &amp; send</h3><p><b>Send preview to me</b>, check it on your phone, then forward it or paste the HTML into your mailer.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="compare">
+  <div class="wrap">
+    <div class="kicker">Doc design vs. output</div>
+    <h2>Editors write plain Docs. Readers get a designed newsletter.</h2>
+    <p class="lede">No drag-and-drop builder and no HTML. Built-in paragraph styles carry the structure, and the brand colours, fonts, dividers and footer come from the template.</p>
+    <div class="compare">
+      <figure>
+        <div class="label">In Google Docs</div>
+        <div class="shot tall"><img src="img/doc-page.jpg" width="900" height="1164" loading="lazy" alt="Google Doc page: Title The Weekly Update, Subtitle date, Heading 1 sections, body text and a full-width flyer image"></div>
+        <figcaption>Page 1 of the template Doc, exported from Google Docs. It uses Title, Subtitle and Heading 1 styles, a soft line break inside the first heading, and a full-width image.</figcaption>
+      </figure>
+      <figure>
+        <div class="label">In the inbox</div>
+        <div class="shot tall"><img src="img/email-desktop.jpg" width="1000" height="1650" loading="lazy" alt="Rendered email: coloured header band, centred headings, automatic red dividers between sections, full-bleed flyer"></div>
+        <figcaption>The same Doc rendered by the script: header band, centred section headings, an automatic divider before each section and a full-bleed flyer.</figcaption>
+      </figure>
+    </div>
+
+    <div class="trio">
+      <figure>
+        <div class="shot"><img src="img/email-cards.jpg" width="800" height="790" loading="lazy" alt="Yearbook section of the email ending in two download cards for PDF files, each with a PDF badge and a Download link"></div>
+        <figcaption>A line that's only a Drive file link becomes a download card.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot tall"><img src="img/email-phone.jpg" width="520" height="2000" loading="lazy" alt="The newsletter on a 390-pixel-wide phone screen: single column with larger text"></div>
+        <figcaption>On a phone: one column and larger text.</figcaption>
+      </figure>
+      <figure>
+        <div class="shot"><img src="img/web-version.jpg" width="1000" height="1300" loading="lazy" alt="The live web version in a browser, showing the same newsletter under a Google Apps Script banner"></div>
+        <figcaption>“View in browser”: the live web version, served by the template's web app. Personal Google accounts show Google's banner on top; Workspace accounts don't.</figcaption>
+      </figure>
+    </div>
+
+    <table>
+      <thead><tr><th>In the Doc</th><th>In the email</th></tr></thead>
+      <tbody>
+        <tr><td>Title style</td><td>Newsletter name in the coloured header band</td></tr>
+        <tr><td>Subtitle style</td><td>Date line under it</td></tr>
+        <tr><td>Image placed above the Title</td><td>Your own banner instead of the text header</td></tr>
+        <tr><td>Heading 1</td><td>New section, with a divider drawn above it</td></tr>
+        <tr><td>Heading 2 / 3</td><td>Smaller headings inside a section</td></tr>
+        <tr><td>Normal text</td><td>Bold, italic, underline, colour, links, alignment, bulleted and numbered lists; blank lines become spacing</td></tr>
+        <tr><td>Image</td><td>Full width if it spans the page, otherwise its own size; alt text carries over</td></tr>
+        <tr><td>Insert › Horizontal line</td><td>An extra divider</td></tr>
+        <tr><td>A line that's only a Drive file link or file chip</td><td>Download card with file type and size</td></tr>
+        <tr><td>Table</td><td>Simple bordered table</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section id="menu">
+  <div class="wrap">
+    <div class="kicker">The Newsletter menu</div>
+    <h2>Everything happens inside the Doc</h2>
+    <p class="lede">The script adds one menu to Google Docs. Editors never open the script editor, a terminal or another website.</p>
+    <div class="menu-grid">
+      <div>
+        <div class="gmenu" role="img" aria-label="Illustration of the Newsletter menu in Google Docs">
+          <div class="bar"><span>File</span><span>Edit</span><span>Insert</span><span>Extensions</span><b>Newsletter</b></div>
+          <ul>
+            <li>Preview</li>
+            <li>Send preview to me</li>
+            <li>Send preview to team</li>
+            <li class="sep"></li>
+            <li>Publish web version (View in browser link)</li>
+            <li>Start next issue (make a copy)</li>
+            <li class="sep"></li>
+            <li>Settings…</li>
+            <li>How to write the newsletter</li>
+          </ul>
+        </div>
+        <p class="gmenu-note">Illustration of the menu. The labels match the script exactly.</p>
+      </div>
+      <dl class="items">
+        <dt>Preview</dt><dd>Opens the rendered email at desktop or phone width, with <b>Copy HTML</b> for pasting into any mailer.</dd>
+        <dt>Send preview to me</dt><dd>Emails the newsletter to whoever clicked, from their own account, for a final read on a real phone. It also refreshes the web version once that's published.</dd>
+        <dt>Send preview to team</dt><dd>The same, sent to a list of reviewers you type in (remembered for next time).</dd>
+        <dt>Publish web version</dt><dd>Saves the rendered email as the issue's public page. The email's “View in browser” link opens it, and each issue keeps its own link.</dd>
+        <dt>Start next issue</dt><dd>Copies the Doc, suggests “Weekly Update - Week of M/D” as the name (which becomes the subject) and updates the date line.</dd>
+        <dt>Settings…</dt><dd>Sender name, reply-to, subject override, inbox preview text, colours, background photo, footer and small print. Shared by every issue in the folder.</dd>
+        <dt>How to write the newsletter</dt><dd>A sidebar with the weekly routine and the Doc-to-email rules.</dd>
+      </dl>
+    </div>
+
+    <div class="ui-shots">
+      <figure><div class="shot"><img src="img/dialog-preview.jpg" width="1100" height="853" loading="lazy" alt="Preview dialog with Desktop, Phone, Copy HTML and Send preview to me buttons above the rendered newsletter"></div><figcaption>Preview dialog</figcaption></figure>
+      <figure><div class="shot"><img src="img/sidebar-settings.jpg" width="420" height="1378" loading="lazy" alt="Settings sidebar with Email, Look and Footer fields and colour pickers"></div><figcaption>Settings sidebar</figcaption></figure>
+      <div class="stack">
+        <figure><div class="shot"><img src="img/dialog-published.png" width="600" height="240" loading="lazy" alt="Published dialog with Open web version and Copy link buttons"></div><figcaption>After publishing</figcaption></figure>
+        <figure><div class="shot"><img src="img/sidebar-help.jpg" width="420" height="1378" loading="lazy" alt="Help sidebar listing the weekly steps and how Doc styles map to the email"></div><figcaption>Help sidebar</figcaption></figure>
+      </div>
+    </div>
+    <p class="gmenu-note" style="margin-top:14px">The dialogs and sidebars are the script's own HTML templates, rendered outside Google Docs, so Google's window frame is missing.</p>
+  </div>
+</section>
+
+<section id="formats">
+  <div class="wrap">
+    <div class="kicker">Output formats</div>
+    <h2>One Doc, four ways out</h2>
+    <div class="formats">
+      <div class="card">
+        <h3>Responsive HTML email</h3>
+        <p>Built from tables with inline styles, plus an Outlook wrapper, hidden inbox preview text, a phone layout below 630px and a forced light colour scheme. It stays under the size where Gmail clips long messages (about 100 KB).</p>
+      </div>
+      <div class="card">
+        <h3>Web version</h3>
+        <p>The same design as a public page for “View in browser”. It's a saved copy of each issue, so old emails keep opening their own week.</p>
+      </div>
+      <div class="card">
+        <h3>Plain-text alternative</h3>
+        <p>Sent with every email for text-only mail apps and screen readers.</p>
+<pre>THE WEEKLY UPDATE
+September 21, 2026
+
+View in browser: https://script.google.com/macros/s/…/exec?issue=…
+
+REMINDER: SCHOOL IS CLOSED
+ON MONDAY, SEPTEMBER 21 YOM KIPPUR
+============================================================
+
+MARK YOUR CALENDAR - WEEK OF SEPTEMBER 21
+=========================================
+Tuesday, September 22 -
+* Intramural basketball starts after school. Meet in the gym.
+  Tuesdays, Wednesdays and Thursdays.</pre>
+      </div>
+      <div class="card">
+        <h3>Portable HTML for your mailer</h3>
+        <p><b>Preview › Copy HTML</b> gives standard email HTML you can paste into any mailing tool that accepts custom HTML. Images point to public copies in your Drive, so they keep loading when the email is forwarded.</p>
+        <p>There's also a command-line tool for maintainers:</p>
+<pre>node cli/newsletter.mjs render --doc &lt;doc-url&gt; --out out
+node cli/newsletter.mjs send   --doc &lt;doc-url&gt;</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="why">
+  <div class="wrap">
+    <div class="kicker">Trade-offs</div>
+    <h2>Compared with a paid newsletter service</h2>
+    <div class="split">
+      <div>
+        <h3>What you gain</h3>
+        <ul class="list pros">
+          <li><b>No subscription or per-seat pricing</b><span>It runs on Google Apps Script with the Google account you already have.</span></li>
+          <li><b>Nothing new to learn</b><span>Editors write in Google Docs. There's no new login or builder.</span></li>
+          <li><b>Real collaboration</b><span>Co-editing, comments, suggestions and full version history come with Docs.</span></li>
+          <li><b>Your content stays yours</b><span>Issues, images and settings live in your Drive, not on a vendor's servers.</span></li>
+          <li><b>No lock-in</b><span>The output is standard email HTML that works with any sender. The code is MIT-licensed and yours to change.</span></li>
+          <li><b>A permanent archive</b><span>Every issue is a Doc plus a web page with a stable link.</span></li>
+        </ul>
+      </div>
+      <div>
+        <h3>What it explicitly does not do</h3>
+        <ul class="list cons">
+          <li><b>Manage contacts or mailing lists</b><span>There's no audience, subscriber list, groups or sign-up form. Your school's system (Finalsite, your SIS, Google Groups) owns distribution.</span></li>
+          <li><b>Send to families in bulk</b><span>Preview sends go through Apps Script's mail service, which has daily recipient limits meant for previews, not school-wide sends.</span></li>
+          <li><b>Handle unsubscribes or compliance</b><span>Opt-outs, bounces and list-mail rules belong to your sending platform.</span></li>
+          <li><b>Track opens or clicks</b><span>There's no analytics or tracking pixels.</span></li>
+          <li><b>Schedule sends or translate</b><span>There's no send queue and no built-in translation button.</span></li>
+          <li><b>Offer a visual builder</b><span>Layout comes from Doc styles and one brand template, not drag-and-drop blocks.</span></li>
+        </ul>
+      </div>
+    </div>
+    <p class="callout">In short, this replaces the <em>authoring and design</em> part of a newsletter service. Hand the finished email or its HTML to whatever already delivers mail to your families.</p>
+  </div>
+</section>
+
+<section id="setup">
+  <div class="wrap">
+    <div class="kicker">Setup</div>
+    <h2>For the maintainer</h2>
+    <p class="lede">You'll need Node 20 (or <a href="https://mise.jdx.dev">mise</a>), Docker for tests, and Google's <a href="https://github.com/googleworkspace/cli"><code>gws</code></a> CLI signed in with the Drive, Docs, Apps Script and Gmail scopes. Turn on the Apps Script API in your <a href="https://script.google.com/home/usersettings">Apps Script settings</a>.</p>
+<pre>git clone https://github.com/michaelbino/weekly-update && cd weekly-update
+scripts/create-template.zsh   # Drive folder, seeded template Doc, bound script, web app
+scripts/deploy-script.zsh     # push script changes and redeploy the web app
+scripts/test.zsh              # test suite in Docker
+scripts/teardown.zsh          # move the template folder to the trash</pre>
+    <p>Then open the template Doc, reload it, and use the <b>Newsletter</b> menu. Google asks you to authorize the script the first time. Brand defaults live in <code>apps-script/Config.js</code>. The <a href="https://github.com/michaelbino/weekly-update#readme">README</a> covers the rest.</p>
+  </div>
+</section>
+</main>
+
+<footer>
+  <div class="wrap">
+    MIT licensed · <a href="https://github.com/michaelbino/weekly-update">github.com/michaelbino/weekly-update</a> · Screenshots use the sample issue that ships with the template.
+  </div>
+</footer>
+</body>
+</html>
