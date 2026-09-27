@@ -1,6 +1,6 @@
 # Weekly Update newsletter
 
-**Project page with screenshots:** https://michaelbino.github.io/weekly-update/
+**Project page with screenshots:** https://michaelbino.com/projects/weekly-update/
 
 Write the weekly newsletter in a Google Doc. Send yourself a responsive HTML email that matches `example.eml`: coloured header band, centred section headings, red dividers, full-width flyers, download cards and a footer band. The email's **View in browser** link opens a public web page that looks exactly like the email.
 

@@ -14,6 +14,7 @@
     "test": "node --test test/",
     "render": "node cli/newsletter.mjs render --json test/fixtures/template-doc.json --out out",
     "preview": "node cli/newsletter.mjs preview --watch",
-    "check-theme": "node cli/newsletter.mjs check-theme"
+    "check-theme": "node cli/newsletter.mjs check-theme",
+    "publish-site": "scripts/publish-to-site.zsh"
   }
 }
