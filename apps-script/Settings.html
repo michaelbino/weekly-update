@@ -25,6 +25,9 @@
   <label>Preview text<small>Shown after the subject in the inbox. Blank = Title + Subtitle</small><input type="text" name="preheader" value="<?= config.preheader ?>"></label>
   <label>View in browser link<small>Blank = this Doc’s published web version</small><input type="url" name="viewInBrowserUrl" value="<?= config.viewInBrowserUrl ?>"></label>
 
+  <h3>Translation</h3>
+  <label>Languages<small>Google Translate codes, comma-separated (e.g. es, zh-CN, ko, ht, ar). Each gets a translated web page linked from the email. Blank = off</small><input type="text" name="translateLanguages" value="<?= config.translateLanguages ?>"></label>
+
   <h3>Look</h3>
   <div class="row">
     <div><label>Accent<input type="color" name="accentColor" value="<?= config.accentColor ?>"></label></div>

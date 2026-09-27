@@ -4,12 +4,13 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const crypto = require('node:crypto');
 const fixture = require('./fixtures/template-doc.json');
 
 const SRC = ['Config.js', 'Newsletter.js', 'WebApp.js', 'Code.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'apps-script', f), 'utf8'));
 
 function makeEnv(opts = {}) {
-  const calls = { templates: [], snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
+  const calls = { translations: [], templates: [], snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
   const files = {}; // name -> content in the Doc's folder
   const ANYONE = 'ANYONE_WITH_LINK';
   let fileSeq = 0;
@@ -32,10 +33,16 @@ function makeEnv(opts = {}) {
     return f;
   }
   const iter = (arr) => { let i = 0; return { hasNext: () => i < arr.length, next: () => arr[i++] }; };
+  const snapByName = {};
   const snapFolder = {
     getId: () => 'SNAPFOLDER',
-    createFile: (n, c, m) => { const f = mockFile('snap' + ++fileSeq + 'abcdefghij', n, c, 'PRIVATE', m, snapFolder); calls.snapshots.push(f.id); return f; },
+    createFile: (n, c, m) => {
+      const f = mockFile('snap' + ++fileSeq + 'abcdefghij', n, c, 'PRIVATE', m, snapFolder);
+      calls.snapshots.push(f.id); snapByName[n] = f; return f;
+    },
+    getFilesByName: (n) => iter(snapByName[n] ? [snapByName[n]] : []),
   };
+  const cacheStore = {};
   const folder = {
     getId: () => 'FOLDER',
     getFilesByName: (n) => iter(files[n] ? [files[n]] : []),
@@ -97,9 +104,21 @@ function makeEnv(opts = {}) {
     PropertiesService: { getDocumentProperties: () => ({ getProperty: (k) => docProps[k] || null, setProperty: (k, v) => { docProps[k] = v; } }) },
     UrlFetchApp: { fetch: () => ({ getResponseCode: () => 200, getBlob: () => blob('image/jpeg') }) },
     ScriptApp: { getOAuthToken: () => 'tok' },
+    LanguageApp: {
+      translate: (html, src, lang, args) => {
+        calls.translations.push({ lang, src, args });
+        if (opts.failLang === lang) throw new Error('Service invoked too many times');
+        return html.split(/(<[^>]+>)/).map((p) => (p.startsWith('<') || !/[A-Za-z]/.test(p) ? p : `[${lang}]${p}`)).join('');
+      },
+    },
+    CacheService: { getScriptCache: () => ({ get: (k) => (k in cacheStore ? cacheStore[k] : null), put: (k, v) => { cacheStore[k] = v; } }) },
     Utilities: {
       DigestAlgorithm: { MD5: 'MD5' },
-      computeDigest: () => [0, 15, -1, 16],
+      Charset: { UTF_8: 'UTF-8' },
+      // Strings hash for real (translation cache keys); image bytes get a fixed digest.
+      computeDigest: (alg, value) => (typeof value === 'string'
+        ? Array.from(crypto.createHash('md5').update(value).digest()).map((b) => (b > 127 ? b - 256 : b))
+        : [0, 15, -1, 16]),
       formatDate: (d, tz, f) => (f === 'M/d' ? `${d.getMonth() + 1}/${d.getDate()}` : `F:${d.toISOString().slice(0, 10)}`),
     },
     HtmlService: {
@@ -122,7 +141,7 @@ function makeEnv(opts = {}) {
   if (opts.deployment !== false) {
     vm.runInContext("var NEWSLETTER_DEPLOYMENT = { webAppUrl: 'https://script.google.com/macros/s/DEP/exec', snapshotFolderId: 'SNAPFOLDER' };", ctx);
   }
-  return { ctx, calls, files, docProps };
+  return { ctx, calls, files, docProps, snapByName };
 }
 
 test('onOpen installs the Newsletter menu', () => {
@@ -179,7 +198,7 @@ test('publish writes an email-look snapshot and the email links to the web app',
   const { ctx, calls, docProps } = makeEnv();
   ctx.publishWebVersion();
   assert.equal(calls.revUpdates.length, 0, 'the Doc itself is not published');
-  assert.equal(calls.snapshots.length, 1);
+  assert.equal(calls.snapshots.length, 6, 'original + 5 default translations');
   const snapId = calls.snapshots[0];
   assert.equal(docProps.snapshotFileId, snapId);
   const url = 'https://script.google.com/macros/s/DEP/exec?issue=' + snapId;
@@ -196,7 +215,7 @@ test('publish writes an email-look snapshot and the email links to the web app',
   ctx.sendPreviewToMe();
   assert.ok(calls.mail[0][3].htmlBody.includes('href="' + url + '"'), 'View in browser points at the snapshot');
   assert.ok(!/not published yet/.test(calls.alerts[1][1]));
-  assert.equal(calls.snapshots.length, 1, 'republishing reuses the same file and link');
+  assert.equal(calls.snapshots.length, 6, 'republishing reuses the same files and link');
 });
 
 test('send preview refreshes a published snapshot; Preview dialog never writes one', () => {
@@ -272,4 +291,81 @@ test('nextMonday_ always moves forward to a Monday', () => {
     assert.equal(r.getDay(), 1);
     assert.ok(r > new Date(d + 'T12:00:00'));
   }
+});
+
+
+/* ---------------- translations ---------------- */
+
+test('publishing writes one translated page per language and links them from the email', () => {
+  const { ctx, calls, snapByName } = makeEnv();
+  ctx.publishWebVersion();
+  const [orig, ...rest] = calls.snapshots;
+  assert.equal(rest.length, 5, 'es, zh-CN, ko, ht, ar');
+  for (const lang of ['es', 'zh-CN', 'ko', 'ht', 'ar']) {
+    const f = snapByName[`${orig}.${lang}.html`];
+    assert.ok(f, `missing ${lang}`);
+    assert.match(f.content, new RegExp(`<html lang="${lang}"`));
+    assert.match(f.content, new RegExp(`\\[${lang}\\]Mark Your Calendar`));
+    assert.match(f.content, /Read the original \(English\)<\/a>/);
+    assert.match(f.description, /^Weekly Update - Week of 9\/21 \(/);
+  }
+  assert.match(snapByName[`${orig}.ar.html`].content, /<html lang="ar" dir="rtl"/);
+  assert.ok(calls.translations.every((t) => t.src === 'en' && t.args.contentType === 'html'));
+
+  const original = ctx.DriveApp.getFileById(orig).content;
+  assert.ok(!original.includes('[es]'), 'original page is not translated');
+  assert.match(original, /<strong lang="en"[^>]*>English<\/strong>/);
+
+  ctx.sendPreviewToMe();
+  const body = calls.mail[0][3].htmlBody;
+  const base = 'https://script.google.com/macros/s/DEP/exec?issue=' + orig;
+  assert.ok(body.includes(`href="${base}&amp;lang=es"`), 'email links the Spanish page');
+  assert.ok(body.includes(`href="${base}&amp;lang=zh-CN"`));
+  assert.ok(!body.includes('[es]'), 'the email itself stays in the original language');
+});
+
+test('unchanged sections are served from the cache on the next send', () => {
+  const { ctx, calls } = makeEnv();
+  ctx.publishWebVersion();
+  const first = calls.translations.length;
+  assert.ok(first > 0);
+  ctx.sendPreviewToMe();
+  assert.equal(calls.translations.length, first, 'no new Translate calls for an unchanged Doc');
+});
+
+test('a failing language is reported and the others still publish', () => {
+  const { ctx, calls, snapByName } = makeEnv({ failLang: 'ko' });
+  ctx.publishWebVersion();
+  const orig = calls.snapshots[0];
+  assert.ok(!snapByName[`${orig}.ko.html`]);
+  assert.ok(snapByName[`${orig}.es.html`] && snapByName[`${orig}.ar.html`]);
+  const dialog = calls.templates.find((t) => t.name === 'LinkDialog');
+  assert.ok(dialog.warnings.some((w) => /한국어/.test(w) && /too many times/.test(w)));
+});
+
+test('doGet serves ?lang= translations and falls back to the original', () => {
+  const { ctx, calls } = makeEnv();
+  ctx.publishWebVersion();
+  const id = calls.snapshots[0];
+  assert.match(ctx.doGet({ parameter: { issue: id, lang: 'es' } }).content, /<html lang="es"/);
+  assert.match(ctx.doGet({ parameter: { issue: id, lang: 'es' } }).title, /\(Español\)$/);
+  for (const lang of ['fr', '../x', '']) {
+    assert.match(ctx.doGet({ parameter: { issue: id, lang } }).content, /<html lang="en"/, `fallback for ${lang}`);
+  }
+  assert.match(ctx.doGet({ parameter: { issue: 'someOtherFile123', lang: 'es' } }).content, /could not be found/);
+});
+
+test('translation is off with an empty language list, and never runs before publishing', () => {
+  const off = makeEnv();
+  off.ctx.saveSettings({ translateLanguages: '' });
+  off.ctx.publishWebVersion();
+  assert.equal(off.calls.snapshots.length, 1);
+  assert.equal(off.calls.translations.length, 0);
+  off.ctx.sendPreviewToMe();
+  assert.ok(!off.calls.mail[0][3].htmlBody.includes('&#127760;'));
+
+  const unpublished = makeEnv();
+  unpublished.ctx.sendPreviewToMe();
+  assert.equal(unpublished.calls.translations.length, 0);
+  assert.ok(!unpublished.calls.mail[0][3].htmlBody.includes('&#127760;'), 'no language row without web pages');
 });

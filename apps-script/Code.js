@@ -249,16 +249,36 @@ function buildNewsletter_(opts) {
   }
 
   var subject = cfg.subject || gdoc.getName();
+  var source = cfg.sourceLanguage || 'en';
+  var languages = snapshot ? nlParseLanguages(cfg.translateLanguages, source) : [];
+  var originalUrl = snapshot ? nlSnapshotUrl_(snapshot) : '';
+  // Language row: the original plus one web page per translation (only once a web version exists).
+  var languageLinks = languages.length ? [{ code: source, url: originalUrl }].concat(languages.map(function (lang) {
+    return { code: lang, url: originalUrl + '&lang=' + encodeURIComponent(lang) };
+  })) : [];
   var renderOpts = {
     config: cfg,
     subject: subject,
     viewInBrowserUrl: viewUrl,
+    languages: languageLinks,
     resolveImage: function (img) { return srcById[img.objectId] || img.contentUri; }
   };
   if (snapshot) {
     // The web version has no "View in browser" bar and needs publicly hosted images.
     if (hosting === 'inline') warnings.push('Images are embedded in the email only, so they will be missing from the web version.');
-    nlWriteSnapshot_(snapshot, nlRenderHtml(model, Object.assign({}, renderOpts, { viewInBrowserUrl: '' })), subject);
+    var webOpts = Object.assign({}, renderOpts, { viewInBrowserUrl: '', lang: source });
+    nlWriteSnapshot_(snapshot, nlRenderHtml(model, webOpts), subject);
+    languages.forEach(function (lang) {
+      try {
+        var html = nlRenderHtml(model, Object.assign({}, webOpts, {
+          lang: lang, originalUrl: originalUrl, translateHtml: nlTranslator_(lang, source)
+        }));
+        nlWriteTranslation_(snapshot, lang, html, subject + ' (' + nlLanguageName(lang) + ')');
+      } catch (e) {
+        warnings.push('Could not translate into ' + nlLanguageName(lang) + ' (' + e.message + '). ' +
+          'Its link shows the previous translation, or the original if there is none. Try again later.');
+      }
+    });
   }
   return {
     subject: subject,
@@ -268,6 +288,25 @@ function buildNewsletter_(opts) {
     warnings: warnings,
     viewInBrowserUrl: viewUrl,
     config: cfg
+  };
+}
+
+/**
+ * Google Translate via LanguageApp (no API key). HTML mode keeps tags and styles.
+ * Results are cached by content for 6 hours so resending a preview only
+ * translates sections that changed.
+ */
+function nlTranslator_(lang, source) {
+  var cache = CacheService.getScriptCache();
+  return function (html) {
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, lang + '|' + html, Utilities.Charset.UTF_8)
+      .map(function (b) { return ((b + 256) % 256).toString(16).replace(/^(.)$/, '0$1'); }).join('');
+    var key = 'tx:' + digest;
+    var hit = cache.get(key);
+    if (hit !== null) return hit;
+    var out = LanguageApp.translate(html, source, lang, { contentType: 'html' });
+    try { cache.put(key, out, 21600); } catch (e) { /* value too large to cache */ }
+    return out;
   };
 }
 

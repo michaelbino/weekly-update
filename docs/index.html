@@ -249,9 +249,9 @@
         <dt>Preview</dt><dd>Opens the rendered email at desktop or phone width, with <b>Copy HTML</b> for pasting into any mailer.</dd>
         <dt>Send preview to me</dt><dd>Emails the newsletter to whoever clicked, from their own account, for a final read on a real phone. It also refreshes the web version once that's published.</dd>
         <dt>Send preview to team</dt><dd>The same, sent to a list of reviewers you type in (remembered for next time).</dd>
-        <dt>Publish web version</dt><dd>Saves the rendered email as the issue's public page. The email's “View in browser” link opens it, and each issue keeps its own link.</dd>
+        <dt>Publish web version</dt><dd>Saves the rendered email as the issue's public page, plus a translated copy for each chosen language. The email's “View in browser” link and 🌐 language row open them, and each issue keeps its own links.</dd>
         <dt>Start next issue</dt><dd>Copies the Doc, suggests “Weekly Update - Week of M/D” as the name (which becomes the subject) and updates the date line.</dd>
-        <dt>Settings…</dt><dd>Sender name, reply-to, subject override, inbox preview text, colours, background photo, footer and small print. Shared by every issue in the folder.</dd>
+        <dt>Settings…</dt><dd>Sender name, reply-to, subject override, inbox preview text, translation languages, colours, background photo, footer and small print. Shared by every issue in the folder.</dd>
         <dt>How to write the newsletter</dt><dd>A sidebar with the weekly routine and the Doc-to-email rules.</dd>
       </dl>
     </div>
@@ -271,7 +271,7 @@
 <section id="formats">
   <div class="wrap">
     <div class="kicker">Output formats</div>
-    <h2>One Doc, four ways out</h2>
+    <h2>One Doc, five ways out</h2>
     <div class="formats">
       <div class="card">
         <h3>Responsive HTML email</h3>
@@ -280,6 +280,11 @@
       <div class="card">
         <h3>Web version</h3>
         <p>The same design as a public page for “View in browser”. It's a saved copy of each issue, so old emails keep opening their own week.</p>
+      </div>
+      <div class="card">
+        <h3>Translated web pages</h3>
+        <p>For each language in Settings (by default Español, 中文, 한국어, Kreyòl ayisyen and العربية), Google Translate produces a copy of the web page. A 🌐 row at the top of the email and every page links them all.</p>
+        <p>Right-to-left languages get right-to-left layout. Each page carries a machine-translation notice with a link back to the English original. Translation uses Apps Script's built-in Google Translate: no API key and no billing. Text inside flyer images isn't translated.</p>
       </div>
       <div class="card">
         <h3>Plain-text alternative</h3>
@@ -324,6 +329,7 @@ node cli/newsletter.mjs send   --doc &lt;doc-url&gt;</pre>
           <li><b>Your content stays yours</b><span>Issues, images and settings live in your Drive, not on a vendor's servers.</span></li>
           <li><b>No lock-in</b><span>The output is standard email HTML that works with any sender. The code is MIT-licensed and yours to change.</span></li>
           <li><b>A permanent archive</b><span>Every issue is a Doc plus a web page with a stable link.</span></li>
+          <li><b>Translation included</b><span>Families get one-tap links to Google-translated pages in the languages you choose, at no extra cost.</span></li>
         </ul>
       </div>
       <div>
@@ -333,7 +339,8 @@ node cli/newsletter.mjs send   --doc &lt;doc-url&gt;</pre>
           <li><b>Send to families in bulk</b><span>Preview sends go through Apps Script's mail service, which has daily recipient limits meant for previews, not school-wide sends.</span></li>
           <li><b>Handle unsubscribes or compliance</b><span>Opt-outs, bounces and list-mail rules belong to your sending platform.</span></li>
           <li><b>Track opens or clicks</b><span>There's no analytics or tracking pixels.</span></li>
-          <li><b>Schedule sends or translate</b><span>There's no send queue and no built-in translation button.</span></li>
+          <li><b>Schedule sends</b><span>There's no send queue. Send from your mail system when you're ready.</span></li>
+          <li><b>Human-quality translation</b><span>Translations are machine-generated, and text inside images isn't translated.</span></li>
           <li><b>Offer a visual builder</b><span>Layout comes from Doc styles and one brand template, not drag-and-drop blocks.</span></li>
         </ul>
       </div>

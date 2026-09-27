@@ -41,6 +41,17 @@ Each copy carries its own copy of the script, so Google asks for authorization t
 | A line that is *only* a Drive file link or file chip | Download card showing the file type and size |
 | Table | Simple bordered table |
 
+### Translations
+
+Once an issue's web version is published, each language in **Settings › Translation** (default: `es, zh-CN, ko, ht, ar`) gets a machine-translated copy of the web page. The email and each web page start with a 🌐 row (English · Español · 中文 · 한국어 · Kreyòl ayisyen · العربية) linking to them at `…/exec?issue=<id>&lang=es`. The email itself stays in the original language.
+
+- It uses Apps Script's built-in `LanguageApp` (Google Translate): no API key, no Cloud project, no billing. HTML mode translates text and leaves tags, links and styles alone.
+- It sends one call per section, not per paragraph. Results are cached by content for 6 hours, so resending a preview only re-translates what changed.
+- Arabic, Farsi, Urdu, Hebrew and other right-to-left languages get right-to-left layout.
+- Each translated page opens with a machine-translation notice and a "Read the original (English)" link. A missing or failed language falls back to the original page.
+- Text inside images (flyers) is not translated, only alt text. Put key dates, times and costs in the Doc text too.
+- Translation runs on Publish and each Send preview, so the first publish takes longer.
+
 **Newsletter › Settings…** changes the sender name, reply-to, subject override, preview text, colours, background photo, footer and small print. Settings are saved to `Newsletter settings.json` next to the Doc, so every issue in that folder shares them. Brand defaults live in `apps-script/Config.js`.
 
 ## Setup (maintainer)
@@ -69,6 +80,7 @@ Code pushed to the template doesn't reach issues that were already copied. New i
 - The web app runs as the person who deployed it, so that account must have authorized the template's script once (open the template and use any Newsletter menu item).
 - On a personal gmail.com account, Google shows a small "created by a Google Apps Script user" banner above the page. Workspace accounts don't show it.
 - If `Deployment.js` is missing (web app not deployed), **Publish web version** falls back to publishing the Doc itself to the web.
+- Translated pages are saved next to each snapshot as `<snapshotId>.<lang>.html`. `doGet` accepts `lang` only as a language code and looks the file up inside the snapshot folder.
 
 ### CLI
 

@@ -19,8 +19,13 @@ function nlDeployment_() {
 
 function doGet(e) {
   var dep = nlDeployment_();
-  var id = e && e.parameter && e.parameter.issue;
+  var params = (e && e.parameter) || {};
+  var id = params.issue;
   var file = dep && id && /^[\w-]{10,100}$/.test(id) ? nlSnapshotFile_(id, dep.snapshotFolderId) : null;
+  // ?lang=es serves that translation; missing translations fall back to the original.
+  if (file && params.lang && NL_LANG_CODE_RE.test(params.lang)) {
+    file = nlTranslationFile_(file, params.lang, dep.snapshotFolderId) || file;
+  }
   if (!file) {
     return HtmlService.createHtmlOutput(
       '<p style="font-family:Arial,sans-serif;padding:24px;color:#444">This newsletter could not be found.</p>')
@@ -63,6 +68,23 @@ function nlEnsureSnapshot_(name) {
 
 function nlSnapshotUrl_(file) {
   return nlDeployment_().webAppUrl + '?issue=' + encodeURIComponent(file.getId());
+}
+
+function nlTranslationName_(snapshot, lang) {
+  return snapshot.getId() + '.' + lang + '.html';
+}
+
+function nlTranslationFile_(snapshot, lang, folderId) {
+  var files = DriveApp.getFolderById(folderId).getFilesByName(nlTranslationName_(snapshot, lang));
+  return files.hasNext() ? files.next() : null;
+}
+
+/** Saves one language's page next to the original snapshot (name: <snapshotId>.<lang>.html). */
+function nlWriteTranslation_(snapshot, lang, html, title) {
+  var dep = nlDeployment_();
+  var file = nlTranslationFile_(snapshot, lang, dep.snapshotFolderId) ||
+    DriveApp.getFolderById(dep.snapshotFolderId).createFile(nlTranslationName_(snapshot, lang), html, MimeType.HTML);
+  nlWriteSnapshot_(file, html, title);
 }
 
 function nlWriteSnapshot_(file, html, subject) {

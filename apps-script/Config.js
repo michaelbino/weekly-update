@@ -22,6 +22,11 @@ var NEWSLETTER_CONFIG = {
   // to me" always receives it; these are only used by "Send preview to team".
   previewRecipients: '',
 
+  // Translated web versions: comma-separated Google Translate codes (blank = off).
+  // Each gets its own "View in browser" page and a link in the email's language row.
+  translateLanguages: 'es, zh-CN, ko, ht, ar',
+  sourceLanguage: 'en',
+
   // Colours
   accentColor: '#c73a3a',      // header band, dividers, footer band
   accentTextColor: '#fff4c2',  // text on the accent colour

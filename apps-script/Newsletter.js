@@ -9,6 +9,30 @@
 // near this width render full-bleed in the email.
 var NL_DOC_CONTENT_WIDTH_PT = 468;
 var NL_EMAIL_WIDTH = 700;
+// Native names for the language row; any Google Translate code works, unknown ones show the code.
+var NL_LANGUAGE_NAMES = {
+  en: 'English', es: 'Español', 'zh-CN': '中文(简体)', 'zh-TW': '中文(繁體)', ko: '한국어', ht: 'Kreyòl ayisyen',
+  ar: 'العربية', hi: 'हिन्दी', gu: 'ગુજરાતી', pa: 'ਪੰਜਾਬੀ', bn: 'বাংলা', te: 'తెలుగు', ta: 'தமிழ்', ur: 'اردو',
+  pt: 'Português', fr: 'Français', vi: 'Tiếng Việt', ru: 'Русский', uk: 'Українська', pl: 'Polski', ja: '日本語',
+  tl: 'Tagalog', fa: 'فارسی', so: 'Soomaali', sw: 'Kiswahili', de: 'Deutsch', it: 'Italiano', iw: 'עברית', he: 'עברית',
+  am: 'አማርኛ', ne: 'नेपाली', ps: 'پښتو', my: 'မြန်မာ', km: 'ខ្មែរ', tr: 'Türkçe', el: 'Ελληνικά'
+};
+var NL_RTL_LANGUAGES = { ar: 1, he: 1, iw: 1, fa: 1, ur: 1, ps: 1, yi: 1, sd: 1, ug: 1, dv: 1 };
+var NL_LANG_CODE_RE = /^[a-z]{2,3}(-[A-Za-z]{2,4})?$/;
+
+/** Parses "es, zh-CN, ko" into valid, de-duplicated language codes (never the source language). */
+function nlParseLanguages(list, source) {
+  var seen = {};
+  return String(list || '').split(/[\s,;]+/).filter(function (code) {
+    if (!NL_LANG_CODE_RE.test(code) || code === (source || 'en') || seen[code]) return false;
+    seen[code] = true;
+    return true;
+  });
+}
+
+function nlLanguageName(code) { return NL_LANGUAGE_NAMES[code] || code.toUpperCase(); }
+function nlIsRtl(code) { return !!NL_RTL_LANGUAGES[String(code).split('-')[0]]; }
+
 var NL_ORDERED_GLYPHS = {
   DECIMAL: 'decimal', ZERO_DECIMAL: 'decimal-leading-zero',
   UPPER_ALPHA: 'upper-alpha', ALPHA: 'lower-alpha',
@@ -375,7 +399,9 @@ function nlSafeUrl_(url) {
 
 /**
  * Renders the model to a responsive, email-client-safe HTML document.
- * opts: { config, viewInBrowserUrl, subject, resolveImage(img) -> src }
+ * opts: { config, viewInBrowserUrl, subject, resolveImage(img) -> src,
+ *         lang, translateHtml(html) -> html, languages: [{code, url}], originalUrl }
+ * translateHtml is called once per section (not per paragraph) to keep Translate calls low.
  */
 function nlRenderHtml(model, opts) {
   opts = opts || {};
@@ -384,7 +410,17 @@ function nlRenderHtml(model, opts) {
   var body = c.bodyFont;
   var pStyle = 'margin:0;font-family:' + body + ';font-size:15px;line-height:1.5;color:' + c.textColor +
     ';overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;';
-  var ctx = { c: c, resolve: resolve, pStyle: pStyle };
+  var lang = opts.lang || c.sourceLanguage || 'en';
+  var rtl = nlIsRtl(lang);
+  var translate = opts.translateHtml;
+  var ctx = {
+    c: c, resolve: resolve, pStyle: pStyle, rtl: rtl, start: rtl ? 'right' : 'left',
+    // Translate an HTML fragment; skip calls for fragments with no words.
+    tx: function (html) {
+      return translate && /[^\s\u00a0]/.test(nlPlain_(html).replace(/&nbsp;/g, '')) ? translate(html) : html;
+    },
+    txText: function (text) { return translate && text ? nlPlain_(ctx.tx(nlEsc_(text))) : text; }
+  };
 
   var title = model.title || opts.subject || '';
   var preheader = c.preheader || [model.title, model.subtitle].filter(Boolean).join(' ');
@@ -398,10 +434,11 @@ function nlRenderHtml(model, opts) {
     ? "background:" + c.pageBackground + " url('" + nlEsc_(c.backgroundImageUrl) + "') top center / 100% auto no-repeat;"
     : 'background:' + c.pageBackground + ';';
   var view = nlSafeUrl_(opts.viewInBrowserUrl);
+  var topBar = nlTopBar_(view, opts.languages || [], lang, c);
 
   return [
     '<!DOCTYPE html>',
-    '<html lang="en" xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">',
+    '<html lang="' + nlEsc_(lang) + '"' + (rtl ? ' dir="rtl"' : '') + ' xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">',
     '<head>',
     '<meta charset="utf-8">',
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
@@ -418,15 +455,12 @@ function nlRenderHtml(model, opts) {
     '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">' +
       nlEsc_(preheader) + '&nbsp;' + new Array(60).join('&zwnj;&nbsp;') + '</div>',
     '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="' + bgStyle + '">',
-    view ? '<tr><td align="center" style="background:#f4f4f4;border-top:1px solid #dddddd;border-bottom:1px solid #dddddd;padding:8px 10px;">' +
-      '<table role="presentation" class="nl-w" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;"><tr>' +
-      '<td style="font-family:Arial,sans-serif;font-size:12px;color:#777777;">Not displaying correctly? ' +
-      '<a href="' + nlEsc_(view) + '" target="_blank" style="color:#444444;text-decoration:underline;">View in browser</a></td>' +
-      '</tr></table></td></tr>' : '',
+    topBar,
     '<tr><td align="center" style="padding:24px 10px 24px 10px;">',
     '<!--[if mso]><table role="presentation" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->',
     '<table role="presentation" class="nl-card" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0" align="center" ' +
       'style="width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;background:#ffffff;border-radius:4px;border:5px solid rgba(0,0,0,0.1);border-collapse:separate;">',
+    opts.originalUrl ? nlNoticeRow_(opts.originalUrl, ctx) : '',
     rows.join('\n'),
     '</table>',
     '<!--[if mso]></td></tr></table><![endif]-->',
@@ -437,6 +471,43 @@ function nlRenderHtml(model, opts) {
     '</body>',
     '</html>'
   ].join('\n');
+}
+
+/** "Not displaying correctly? View in browser" plus the language row (current language unlinked). */
+function nlTopBar_(view, languages, lang, c) {
+  if (!view && !languages.length) return '';
+  var cell = 'font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#777777;';
+  var links = languages.map(function (l) {
+    var name = nlEsc_(nlLanguageName(l.code));
+    var dir = nlIsRtl(l.code) ? ' dir="rtl"' : '';
+    return l.code === lang || !l.url
+      ? '<strong lang="' + nlEsc_(l.code) + '"' + dir + ' style="color:#222222;">' + name + '</strong>'
+      : '<a href="' + nlEsc_(nlSafeUrl_(l.url)) + '" target="_blank" lang="' + nlEsc_(l.code) + '"' + dir +
+        ' style="color:#444444;text-decoration:underline;">' + name + '</a>';
+  }).join(' &middot; ');
+  return '<tr><td align="center" style="background:#f4f4f4;border-top:1px solid #dddddd;border-bottom:1px solid #dddddd;padding:8px 10px;">' +
+    '<table role="presentation" class="nl-w" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;">' +
+    (view ? '<tr><td dir="ltr" style="' + cell + '">Not displaying correctly? ' +
+      '<a href="' + nlEsc_(view) + '" target="_blank" style="color:#444444;text-decoration:underline;">View in browser</a></td></tr>' : '') +
+    (links ? '<tr><td dir="ltr" style="' + cell + '"><span aria-hidden="true">&#127760;</span> ' + links + '</td></tr>' : '') +
+    '</table></td></tr>';
+}
+
+/** Tells readers the page is machine-translated and links back to the original. */
+function nlNoticeRow_(originalUrl, ctx) {
+  var c = ctx.c;
+  var text = ctx.tx(nlEsc_('Machine-translated by Google Translate. Names, dates and amounts may be wrong; check the original.'));
+  var link = ctx.tx(nlEsc_('Read the original (English)'));
+  return '<tr><td class="nl-box" style="padding:14px 20px 0 20px;">' +
+    '<div style="background:#fff8e1;border:1px solid #f0d58a;border-radius:4px;padding:10px 12px;font-family:' + c.bodyFont +
+    ';font-size:13px;line-height:1.5;color:#5c4a12;text-align:' + ctx.start + ';">' + text + ' ' +
+    '<a href="' + nlEsc_(nlSafeUrl_(originalUrl)) + '" style="color:' + c.linkColor + ';font-weight:bold;">' + link + '</a></div></td></tr>';
+}
+
+/** Tag-stripped, entity-decoded text (for attributes and word checks). */
+function nlPlain_(html) {
+  return String(html || '').replace(/<[^>]*>/g, '')
+    .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
 function nlCss_(c) {
@@ -468,16 +539,16 @@ function nlHeaderRow_(model, ctx) {
   if (model.banner) {
     var src = ctx.resolve(model.banner);
     return '<tr><td style="background:' + c.accentColor + ';border-radius:4px 4px 0 0;" bgcolor="' + c.accentColor + '">' +
-      '<img src="' + nlEsc_(src) + '" width="' + NL_EMAIL_WIDTH + '" alt="' + nlEsc_(model.banner.alt || model.title) + '" ' +
+      '<img src="' + nlEsc_(src) + '" width="' + NL_EMAIL_WIDTH + '" alt="' + nlEsc_(ctx.txText(model.banner.alt || model.title)) + '" ' +
       'style="display:block;width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;height:auto;border-radius:4px 4px 0 0;"></td></tr>';
   }
   if (!model.title && !model.subtitle) return '';
   return '<tr><td align="center" bgcolor="' + c.accentColor + '" style="background:' + c.accentColor +
     ';border-radius:4px 4px 0 0;padding:56px 24px 44px 24px;text-align:center;">' +
     (model.title ? '<h1 class="nl-banner-title" style="margin:0;font-family:' + c.headingFont +
-      ';font-size:52px;line-height:1.05;font-weight:bold;color:' + c.accentTextColor + ';">' + nlEsc_(model.title) + '</h1>' : '') +
+      ';font-size:52px;line-height:1.05;font-weight:bold;color:' + c.accentTextColor + ';">' + ctx.tx(nlEsc_(model.title)) + '</h1>' : '') +
     (model.subtitle ? '<p style="margin:18px 0 0 0;font-family:' + c.bodyFont + ';font-size:17px;letter-spacing:0.08em;text-transform:uppercase;color:#ffffff;">' +
-      nlEsc_(model.subtitle) + '</p>' : '') +
+      ctx.tx(nlEsc_(model.subtitle)) + '</p>' : '') +
     '</td></tr>';
 }
 
@@ -489,7 +560,7 @@ function nlFooterRow_(ctx) {
     : '';
   return '<tr><td bgcolor="' + c.accentColor + '" style="background:' + c.accentColor + ';border-radius:0 0 4px 4px;padding:16px 20px;">' +
     '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0!important;"><tr>' + logo +
-    '<td valign="middle" style="text-align:left;">' +
+    '<td valign="middle" style="text-align:' + ctx.start + ';">' +
     (c.footerName ? '<div style="font-family:' + c.bodyFont + ';font-size:18px;font-weight:bold;line-height:1.2;color:' + c.accentTextColor + ';">' + nlEsc_(c.footerName) + '</div>' : '') +
     (c.footerTagline ? '<div style="font-family:' + c.bodyFont + ';font-size:13px;line-height:1.4;color:' + c.accentTextColor + ';">' + nlEsc_(c.footerTagline) + '</div>' : '') +
     '</td></tr></table></td></tr>';
@@ -534,8 +605,8 @@ function nlRenderGroup_(g, ctx) {
   switch (g.type) {
     case 'heading': return nlHeadingRow_(g, ctx);
     case 'rich':
-      return '<tr><td class="nl-box" align="left" valign="top" style="padding:5px 20px 20px 20px;">' +
-        '<div class="nl-rich" style="' + ctx.pStyle + '">' + nlRenderRich_(g.blocks, ctx) + '</div></td></tr>';
+      return '<tr><td class="nl-box" align="' + ctx.start + '" valign="top" style="padding:5px 20px 20px 20px;">' +
+        '<div class="nl-rich" style="' + ctx.pStyle + 'text-align:' + ctx.start + ';">' + ctx.tx(nlRenderRich_(g.blocks, ctx)) + '</div></td></tr>';
     case 'divider':
       return '<tr><td class="nl-box" style="padding:20px 20px 20px 20px;">' +
         '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>' +
@@ -557,7 +628,7 @@ function nlHeadingRow_(h, ctx) {
   return '<tr><td class="nl-box" align="' + align + '" valign="top" style="padding:' + pad + ';">' +
     '<' + tag + (h.level === 1 ? ' class="nl-h1"' : '') + ' style="margin:0;font-family:' + c.headingFont + ';font-size:' + size +
     'px;line-height:1.25;font-weight:bold;color:' + c.textColor + ';text-align:' + align + ';">' +
-    nlRenderRuns_(h.runs, ctx) + '</' + tag + '></td></tr>';
+    ctx.tx(nlRenderRuns_(h.runs, ctx)) + '</' + tag + '></td></tr>';
 }
 
 function nlRenderRich_(blocks, ctx) {
@@ -587,7 +658,7 @@ function nlRenderList_(items, ctx) {
     var first = nodes[0].item;
     var tag = first.ordered ? 'ol' : 'ul';
     var start = first.ordered && first.number > 1 ? ' start="' + first.number + '"' : '';
-    return '<' + tag + start + ' style="margin:0;padding:0 0 0 1.6em;list-style-type:' + first.listStyle + ';font-family:' +
+    return '<' + tag + start + ' style="margin:0;padding:' + (ctx.rtl ? '0 1.6em 0 0' : '0 0 0 1.6em') + ';list-style-type:' + first.listStyle + ';font-family:' +
       ctx.c.bodyFont + ';font-size:15px;line-height:1.5;color:' + ctx.c.textColor + ';">' +
       nodes.map(function (n) {
         return '<li style="margin:0;">' + nlRenderRuns_(n.item.runs, ctx) + render(n.children) + '</li>';
@@ -619,7 +690,7 @@ function nlImageRow_(img, ctx) {
   if (!src) return '';
   var full = !img.widthPt || img.widthPt >= NL_DOC_CONTENT_WIDTH_PT * 0.85;
   var tag;
-  var alt = nlEsc_(img.alt);
+  var alt = nlEsc_(ctx.txText(img.alt));
   var href = nlSafeUrl_(img.link);
   if (full) {
     tag = '<img src="' + nlEsc_(src) + '" width="' + NL_EMAIL_WIDTH + '" alt="' + alt + '" ' +
@@ -632,7 +703,7 @@ function nlImageRow_(img, ctx) {
   tag = '<img class="nl-img-sized" src="' + nlEsc_(src) + '" width="' + w + '"' + (h ? ' height="' + h + '"' : '') +
     ' alt="' + alt + '" style="display:inline-block;width:' + w + 'px;max-width:100%;height:auto;">';
   if (href) tag = '<a href="' + nlEsc_(href) + '" target="_blank">' + tag + '</a>';
-  var align = img.align === 'right' ? 'right' : img.align === '' ? 'left' : img.align === 'justify' ? 'center' : img.align;
+  var align = img.align === 'right' ? 'right' : img.align === '' ? ctx.start : img.align === 'justify' ? 'center' : img.align;
   return '<tr><td class="nl-box" align="' + align + '" valign="top" style="padding:10px 20px 10px 20px;text-align:' + align + ';">' + tag + '</td></tr>';
 }
 
@@ -668,9 +739,9 @@ function nlAttachmentRow_(att, ctx) {
     '<div style="width:40px;height:44px;line-height:44px;border-radius:4px;background:' + c.accentColor + ';color:#ffffff;' +
     'font-family:Arial,sans-serif;font-size:' + (kind.length > 4 ? 9 : 11) + 'px;font-weight:bold;text-align:center;">' + nlEsc_(kind) + '</div></td>' +
     '<td valign="middle" style="padding:12px;font-family:' + c.bodyFont + ';font-size:15px;line-height:1.4;font-weight:bold;color:' + c.textColor + ';word-break:break-word;">' +
-    nlEsc_(att.title) + '</td>' +
+    ctx.tx(nlEsc_(att.title)) + '</td>' +
     '<td width="90" align="center" valign="middle" style="padding:12px 12px 12px 0;font-family:' + c.bodyFont + ';">' +
-    '<div style="font-size:14px;font-weight:bold;color:' + c.linkColor + ';text-decoration:underline;">' + (native ? 'Open' : 'Download') + '</div>' +
+    '<div style="font-size:14px;font-weight:bold;color:' + c.linkColor + ';text-decoration:underline;">' + ctx.tx(native ? 'Open' : 'Download') + '</div>' +
     (size ? '<div style="font-size:12px;color:#aaaaaa;">' + nlEsc_(size) + '</div>' : '') +
     '</td></tr></table></a></td></tr>';
 }
@@ -691,7 +762,8 @@ function nlRenderTable_(t, ctx) {
           }
           return nlRenderRich_([b], ctx);
         }).join('');
-        return '<td class="nl-rich" valign="top" style="border:1px solid #dddddd;padding:8px;' + bg + '">' + (inner || '&nbsp;') + '</td>';
+        return '<td class="nl-rich" valign="top" style="border:1px solid #dddddd;padding:8px;text-align:' + ctx.start + ';' + bg + '">' +
+          (inner ? ctx.tx(inner) : '&nbsp;') + '</td>';
       }).join('') + '</tr>';
     }).join('') + '</table>';
 }
@@ -759,6 +831,9 @@ function nlRenderText(model, opts) {
 if (typeof module !== 'undefined') {
   module.exports = {
     nlParseDocument: nlParseDocument,
+    nlParseLanguages: nlParseLanguages,
+    nlLanguageName: nlLanguageName,
+    nlIsRtl: nlIsRtl,
     nlRenderHtml: nlRenderHtml,
     nlRenderText: nlRenderText,
     nlCollectImages: nlCollectImages,

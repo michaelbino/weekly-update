@@ -174,3 +174,76 @@ test('empty and tabbed documents do not throw', () => {
   const tabbed = { tabs: [{ documentTab: doc([para('In a tab')]) }] };
   assert.equal(NL.nlParseDocument(tabbed).blocks[0].type, 'paragraph');
 });
+
+/* ---------------- translation ---------------- */
+
+// Fake Translate: marks every text segment, leaves tags and attributes alone.
+function fakeTranslator(calls) {
+  return (html) => {
+    calls.push(html);
+    return html.split(/(<[^>]+>)/).map((part) => (part.startsWith('<') || !/[A-Za-z]/.test(part) ? part : `«${part}»`)).join('');
+  };
+}
+
+const txDoc = () => NL.nlParseDocument(doc([
+  para('The Weekly Update', { style: 'TITLE' }), para('September 21, 2026', { style: 'SUBTITLE' }),
+  para('Dance', { style: 'HEADING_1' }),
+  para([run('Tickets '), run('here', { link: { url: 'https://gofan.co/x' } })]), para('Bring ID'),
+  para('one', { list: 'n' }),
+  para([image('i1')]),
+  para([run('form.pdf', { link: { url: 'https://drive.google.com/file/d/1PkiRk9OH7UsUYV404hNlxXUYkOccoU_7/view' } })]),
+], { lists: { n: numberList }, inlineObjects: { i1: inlineImage('https://img/f.png', 468, 'Dance "flyer"') } }));
+
+const languages = [{ code: 'en', url: 'https://w/exec?issue=S' }, { code: 'es', url: 'https://w/exec?issue=S&lang=es' }, { code: 'ar', url: 'https://w/exec?issue=S&lang=ar' }];
+
+test('translated page: text translated, tags/links/styles intact, one call per section', () => {
+  const calls = [];
+  const html = render(txDoc(), { viewInBrowserUrl: '', lang: 'es', languages, originalUrl: 'https://w/exec?issue=S', translateHtml: fakeTranslator(calls) });
+  assert.match(html, /<html lang="es" xmlns/);
+  assert.match(html, /class="nl-banner-title"[^>]*>«The Weekly Update»<\/h1>/);
+  assert.match(html, /«Dance»<\/h2>/);
+  assert.match(html, /<p style="[^"]*">«Tickets »<a href="https:\/\/gofan.co\/x" target="_blank" style="color:#1c6e98;text-decoration:underline;">«here»<\/a><\/p><p style="[^"]*">«Bring ID»<\/p>/);
+  assert.match(html, /alt="«Dance &quot;flyer&quot;»"/, 'alt text translated and re-escaped');
+  assert.match(html, /«form.pdf»<\/td>/);
+  assert.match(html, /«Download»<\/div>/);
+  assert.match(html, /«Machine-translated by Google Translate\.[^»]*»/);
+  assert.match(html, /<a href="https:\/\/w\/exec\?issue=S"[^>]*>«Read the original \(English\)»<\/a>/);
+  // Title, subtitle, heading, one rich group (2 paragraphs + list), alt, attachment title, Download, notice x2
+  assert.ok(calls.length <= 10, `expected batched calls, got ${calls.length}`);
+  assert.ok(!calls.some((c) => /^\s*$/.test(c)), 'no calls for empty fragments');
+  assert.ok(!html.includes('LMS Nation»'), 'footer brand name is not translated');
+});
+
+test('language row: current language bold, others linked, RTL names marked', () => {
+  const html = render(txDoc(), { viewInBrowserUrl: 'https://w/exec?issue=S', languages });
+  assert.match(html, /<strong lang="en" style="color:#222222;">English<\/strong>/);
+  assert.match(html, /<a href="https:\/\/w\/exec\?issue=S&amp;lang=es"[^>]*lang="es"[^>]*>Español<\/a>/);
+  assert.match(html, /lang="ar" dir="rtl"[^>]*>العربية<\/a>/);
+  assert.match(html, /View in browser<\/a><\/td><\/tr><tr><td dir="ltr"[^>]*><span aria-hidden="true">&#127760;<\/span>/);
+  assert.ok(!render(txDoc(), { viewInBrowserUrl: 'https://v' }).includes('&#127760;'), 'no row without languages');
+});
+
+test('right-to-left languages flip direction and alignment', () => {
+  const html = render(txDoc(), { lang: 'ar', languages, originalUrl: 'https://w/o', translateHtml: (h) => h });
+  assert.match(html, /<html lang="ar" dir="rtl"/);
+  assert.match(html, /class="nl-box" align="right"[^>]*><div class="nl-rich" style="[^"]*text-align:right;"/);
+  assert.match(html, /<ol style="margin:0;padding:0 1.6em 0 0;/);
+  assert.ok(!/class="nl-box" align="left"/.test(html));
+});
+
+test('original rendering is unchanged when no translator is given', () => {
+  const calls = [];
+  const plain = render(txDoc());
+  assert.ok(!plain.includes('«'));
+  assert.ok(!plain.includes('Machine-translated'));
+  assert.match(plain, /<html lang="en" xmlns/);
+  assert.equal(calls.length, 0);
+});
+
+test('language list parsing', () => {
+  assert.deepEqual(NL.nlParseLanguages('es, zh-CN;ko  ht,ar,es,EN,en,b@d,x', 'en'), ['es', 'zh-CN', 'ko', 'ht', 'ar']);
+  assert.deepEqual(NL.nlParseLanguages('', 'en'), []);
+  assert.equal(NL.nlLanguageName('zh-CN'), '中文(简体)');
+  assert.equal(NL.nlLanguageName('xx'), 'XX');
+  assert.ok(NL.nlIsRtl('ar') && NL.nlIsRtl('fa') && !NL.nlIsRtl('es'));
+});
