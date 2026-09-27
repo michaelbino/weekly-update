@@ -205,7 +205,7 @@ function buildNewsletter_(opts) {
   var cfg = getConfig_();
   var json = Docs.Documents.get(docId);
   var model = nlParseDocument(json);
-  var warnings = [];
+  var warnings = nlThemeProblems_().map(function (p) { return 'Theme: ' + p; });
   var inlineImages = {};
   var srcById = {};
 
@@ -261,6 +261,7 @@ function buildNewsletter_(opts) {
     subject: subject,
     viewInBrowserUrl: viewUrl,
     languages: languageLinks,
+    theme: typeof NEWSLETTER_THEME !== 'undefined' ? NEWSLETTER_THEME : null,
     resolveImage: function (img) { return srcById[img.objectId] || img.contentUri; }
   };
   if (snapshot) {
@@ -347,6 +348,31 @@ function publishDoc_(docId) {
   var url = (info && info.publishedLink) || 'https://docs.google.com/document/d/' + docId + '/pub';
   PropertiesService.getDocumentProperties().setProperty(NL_PUBLISHED_URL_KEY, url);
   return url;
+}
+
+function nlThemeProblems_() {
+  return typeof NEWSLETTER_THEME !== 'undefined' ? nlLayoutApi_().validate(NEWSLETTER_THEME) : [];
+}
+
+/**
+ * Browser equivalent of `npm run check-theme`: in the Apps Script editor pick
+ * checkTheme in the function list and click Run; results are in the Execution log.
+ * Validates Theme and test-renders this Doc left-to-right and right-to-left.
+ */
+function checkTheme() {
+  var problems = nlThemeProblems_();
+  if (!problems.length) {
+    try {
+      var model = nlParseDocument(Docs.Documents.get(DocumentApp.getActiveDocument().getId()));
+      var opts = { config: getConfig_(), theme: NEWSLETTER_THEME, languages: [{ code: 'en', url: 'https://example.org' }] };
+      nlRenderHtml(model, opts);
+      nlRenderHtml(model, Object.assign({}, opts, { lang: 'ar', originalUrl: 'https://example.org', translateHtml: function (h) { return h; } }));
+    } catch (e) {
+      problems.push('Rendering failed: ' + e.message);
+    }
+  }
+  Logger.log(problems.length ? 'Theme problems:\n- ' + problems.join('\n- ') : 'Theme OK');
+  return problems;
 }
 
 function nextMonday_(d) {

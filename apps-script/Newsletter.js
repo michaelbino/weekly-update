@@ -8,7 +8,6 @@
 // Docs page content width in points (8.5in page, 1in margins). Images at or
 // near this width render full-bleed in the email.
 var NL_DOC_CONTENT_WIDTH_PT = 468;
-var NL_EMAIL_WIDTH = 700;
 // Native names for the language row; any Google Translate code works, unknown ones show the code.
 var NL_LANGUAGE_NAMES = {
   en: 'English', es: 'Español', 'zh-CN': '中文(简体)', 'zh-TW': '中文(繁體)', ko: '한국어', ht: 'Kreyòl ayisyen',
@@ -397,111 +396,69 @@ function nlSafeUrl_(url) {
   return '';
 }
 
+/** The layout framework (Layout.js): a global in Apps Script, a module in Node. */
+function nlLayoutApi_() {
+  return typeof NL_LAYOUT_API !== 'undefined' ? NL_LAYOUT_API : require('./Layout.js').NL_LAYOUT_API;
+}
+
 /**
  * Renders the model to a responsive, email-client-safe HTML document.
  * opts: { config, viewInBrowserUrl, subject, resolveImage(img) -> src,
- *         lang, translateHtml(html) -> html, languages: [{code, url}], originalUrl }
+ *         lang, translateHtml(html) -> html, languages: [{code, url}], originalUrl,
+ *         theme: { tokens, templates, css } (see Theme.js / docs/THEMING.md) }
  * translateHtml is called once per section (not per paragraph) to keep Translate calls low.
  */
 function nlRenderHtml(model, opts) {
   opts = opts || {};
+  var api = nlLayoutApi_();
+  var layout = api.resolve(opts.theme);
+  var t = layout.tokens;
   var c = Object.assign({}, opts.config || {});
   var resolve = opts.resolveImage || function (img) { return img.contentUri; };
-  var body = c.bodyFont;
-  var pStyle = 'margin:0;font-family:' + body + ';font-size:15px;line-height:1.5;color:' + c.textColor +
-    ';overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;';
+  var pStyle = 'margin:0;font-family:' + c.bodyFont + ';font-size:' + t.bodySize + 'px;line-height:' + t.lineHeight +
+    ';color:' + c.textColor + ';overflow-wrap:break-word;word-wrap:break-word;word-break:break-word;';
   var lang = opts.lang || c.sourceLanguage || 'en';
   var rtl = nlIsRtl(lang);
   var translate = opts.translateHtml;
+  var base = { t: t, c: c, lang: lang, rtl: rtl, start: rtl ? 'right' : 'left', pStyle: pStyle };
   var ctx = {
-    c: c, resolve: resolve, pStyle: pStyle, rtl: rtl, start: rtl ? 'right' : 'left',
+    c: c, t: t, resolve: resolve, pStyle: pStyle, rtl: rtl, start: base.start,
+    // Renders a named template with the shared values plus block data.
+    render: function (name, data) { return api.tpl(layout.templates[name], Object.assign({}, base, data)); },
     // Translate an HTML fragment; skip calls for fragments with no words.
     tx: function (html) {
-      return translate && /[^\s\u00a0]/.test(nlPlain_(html).replace(/&nbsp;/g, '')) ? translate(html) : html;
+      return translate && /[^\s ]/.test(nlPlain_(html).replace(/&nbsp;/g, '')) ? translate(html) : html;
     },
     txText: function (text) { return translate && text ? nlPlain_(ctx.tx(nlEsc_(text))) : text; }
   };
 
-  var title = model.title || opts.subject || '';
-  var preheader = c.preheader || [model.title, model.subtitle].filter(Boolean).join(' ');
-  var rows = [];
-
-  rows.push(nlHeaderRow_(model, ctx));
+  var rows = [nlHeaderRow_(model, ctx), ctx.render('cardTop', {})];
   nlGroupBlocks_(model.blocks, c).forEach(function (g) { rows.push(nlRenderGroup_(g, ctx)); });
-  rows.push(nlFooterRow_(ctx));
+  rows.push(ctx.render('cardBottom', {}), nlFooterRow_(ctx));
 
-  var bgStyle = c.backgroundImageUrl
-    ? "background:" + c.pageBackground + " url('" + nlEsc_(c.backgroundImageUrl) + "') top center / 100% auto no-repeat;"
-    : 'background:' + c.pageBackground + ';';
+  var languages = (opts.languages || []).map(function (l, i) {
+    return { code: l.code, name: nlLanguageName(l.code), url: nlSafeUrl_(l.url), rtl: nlIsRtl(l.code),
+      current: l.code === lang || !l.url, first: i === 0 };
+  });
   var view = nlSafeUrl_(opts.viewInBrowserUrl);
-  var topBar = nlTopBar_(view, opts.languages || [], lang, c);
 
-  return [
-    '<!DOCTYPE html>',
-    '<html lang="' + nlEsc_(lang) + '"' + (rtl ? ' dir="rtl"' : '') + ' xmlns="http://www.w3.org/1999/xhtml" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">',
-    '<head>',
-    '<meta charset="utf-8">',
-    '<meta name="viewport" content="width=device-width, initial-scale=1">',
-    '<meta http-equiv="X-UA-Compatible" content="IE=edge">',
-    '<meta name="x-apple-disable-message-reformatting">',
-    '<meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">',
-    '<meta name="color-scheme" content="light">',
-    '<meta name="supported-color-schemes" content="light">',
-    '<title>' + nlEsc_(title) + '</title>',
-    '<!--[if mso]><noscript><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml></noscript><![endif]-->',
-    '<style>' + nlCss_(c) + '</style>',
-    '</head>',
-    '<body class="nl-body" style="margin:0;padding:0;width:100%;' + bgStyle + '">',
-    '<div style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">' +
-      nlEsc_(preheader) + '&nbsp;' + new Array(60).join('&zwnj;&nbsp;') + '</div>',
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="' + bgStyle + '">',
-    topBar,
-    '<tr><td align="center" style="padding:24px 10px 24px 10px;">',
-    '<!--[if mso]><table role="presentation" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0"><tr><td><![endif]-->',
-    '<table role="presentation" class="nl-card" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0" align="center" ' +
-      'style="width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;background:#ffffff;border-radius:4px;border:5px solid rgba(0,0,0,0.1);border-collapse:separate;">',
-    opts.originalUrl ? nlNoticeRow_(opts.originalUrl, ctx) : '',
-    rows.join('\n'),
-    '</table>',
-    '<!--[if mso]></td></tr></table><![endif]-->',
-    '</td></tr>',
-    c.footerNote ? '<tr><td align="center" style="padding:0 16px 24px 16px;font-family:Arial,sans-serif;font-size:11px;line-height:1.5;color:#888888;">' +
-      nlEsc_(c.footerNote) + '</td></tr>' : '',
-    '</table>',
-    '</body>',
-    '</html>'
-  ].join('\n');
-}
-
-/** "Not displaying correctly? View in browser" plus the language row (current language unlinked). */
-function nlTopBar_(view, languages, lang, c) {
-  if (!view && !languages.length) return '';
-  var cell = 'font-family:Arial,sans-serif;font-size:12px;line-height:1.7;color:#777777;';
-  var links = languages.map(function (l) {
-    var name = nlEsc_(nlLanguageName(l.code));
-    var dir = nlIsRtl(l.code) ? ' dir="rtl"' : '';
-    return l.code === lang || !l.url
-      ? '<strong lang="' + nlEsc_(l.code) + '"' + dir + ' style="color:#222222;">' + name + '</strong>'
-      : '<a href="' + nlEsc_(nlSafeUrl_(l.url)) + '" target="_blank" lang="' + nlEsc_(l.code) + '"' + dir +
-        ' style="color:#444444;text-decoration:underline;">' + name + '</a>';
-  }).join(' &middot; ');
-  return '<tr><td align="center" style="background:#f4f4f4;border-top:1px solid #dddddd;border-bottom:1px solid #dddddd;padding:8px 10px;">' +
-    '<table role="presentation" class="nl-w" width="' + NL_EMAIL_WIDTH + '" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;">' +
-    (view ? '<tr><td dir="ltr" style="' + cell + '">Not displaying correctly? ' +
-      '<a href="' + nlEsc_(view) + '" target="_blank" style="color:#444444;text-decoration:underline;">View in browser</a></td></tr>' : '') +
-    (links ? '<tr><td dir="ltr" style="' + cell + '"><span aria-hidden="true">&#127760;</span> ' + links + '</td></tr>' : '') +
-    '</table></td></tr>';
-}
-
-/** Tells readers the page is machine-translated and links back to the original. */
-function nlNoticeRow_(originalUrl, ctx) {
-  var c = ctx.c;
-  var text = ctx.tx(nlEsc_('Machine-translated by Google Translate. Names, dates and amounts may be wrong; check the original.'));
-  var link = ctx.tx(nlEsc_('Read the original (English)'));
-  return '<tr><td class="nl-box" style="padding:14px 20px 0 20px;">' +
-    '<div style="background:#fff8e1;border:1px solid #f0d58a;border-radius:4px;padding:10px 12px;font-family:' + c.bodyFont +
-    ';font-size:13px;line-height:1.5;color:#5c4a12;text-align:' + ctx.start + ';">' + text + ' ' +
-    '<a href="' + nlEsc_(nlSafeUrl_(originalUrl)) + '" style="color:' + c.linkColor + ';font-weight:bold;">' + link + '</a></div></td></tr>';
+  return ctx.render('document', {
+    title: model.title || opts.subject || '',
+    preheader: c.preheader || [model.title, model.subtitle].filter(Boolean).join(' '),
+    preheaderPad: new Array(60).join('&zwnj;&nbsp;'),
+    css: api.tpl(layout.templates.css, base),
+    bgStyle: c.backgroundImageUrl
+      ? 'background:' + c.pageBackground + " url('" + c.backgroundImageUrl + "') top center / 100% auto no-repeat;"
+      : 'background:' + c.pageBackground + ';',
+    topBar: view || languages.length ? ctx.render('topBar', { view: view, hasLanguages: languages.length > 0, languages: languages }) : '',
+    notice: opts.originalUrl ? ctx.render('notice', {
+      text: ctx.tx(nlEsc_('Machine-translated by Google Translate. Names, dates and amounts may be wrong; check the original.')),
+      linkText: ctx.tx(nlEsc_('Read the original (English)')),
+      originalUrl: nlSafeUrl_(opts.originalUrl)
+    }) : '',
+    rows: rows.filter(Boolean).join('\n'),
+    footerNote: c.footerNote
+  });
 }
 
 /** Tag-stripped, entity-decoded text (for attributes and word checks). */
@@ -510,60 +467,21 @@ function nlPlain_(html) {
     .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&');
 }
 
-function nlCss_(c) {
-  return [
-    ':root{color-scheme:light;supported-color-schemes:light}',
-    'html,body{margin:0 auto!important;padding:0!important;width:100%!important}',
-    '*{-ms-text-size-adjust:100%;-webkit-text-size-adjust:100%}',
-    'table,td{mso-table-lspace:0pt!important;mso-table-rspace:0pt!important}',
-    'table{border-spacing:0!important;border-collapse:collapse;margin:0 auto}',
-    '.nl-card{table-layout:fixed}',
-    '.nl-rich a{word-break:break-all}',
-    'img{-ms-interpolation-mode:bicubic;border:0;outline:none;text-decoration:none}',
-    'a[x-apple-data-detectors],.unstyle-auto-detected-links a{border-bottom:0!important;cursor:default!important;color:inherit!important;text-decoration:none!important;font-size:inherit!important;font-family:inherit!important;font-weight:inherit!important;line-height:inherit!important}',
-    '.a6S{display:none!important;opacity:.01!important}',
-    'u + #body a{color:inherit;text-decoration:none;font-size:inherit;font-family:inherit;font-weight:inherit;line-height:inherit}',
-    '@media screen and (max-width:630px){',
-    '.nl-box{padding-left:14px!important;padding-right:14px!important}',
-    '.nl-rich p,.nl-rich li,.nl-rich span,.nl-rich td{font-size:17px!important}',
-    '.nl-h1{font-size:24px!important}',
-    '.nl-banner-title{font-size:38px!important}',
-    '.nl-img-sized{width:100%!important;height:auto!important}',
-    '.nl-card{border-width:0!important;border-radius:0!important}',
-    '}'
-  ].join('');
-}
-
 function nlHeaderRow_(model, ctx) {
-  var c = ctx.c;
   if (model.banner) {
-    var src = ctx.resolve(model.banner);
-    return '<tr><td style="background:' + c.accentColor + ';border-radius:4px 4px 0 0;" bgcolor="' + c.accentColor + '">' +
-      '<img src="' + nlEsc_(src) + '" width="' + NL_EMAIL_WIDTH + '" alt="' + nlEsc_(ctx.txText(model.banner.alt || model.title)) + '" ' +
-      'style="display:block;width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;height:auto;border-radius:4px 4px 0 0;"></td></tr>';
+    return ctx.render('bannerImage', { src: ctx.resolve(model.banner), alt: ctx.txText(model.banner.alt || model.title) });
   }
   if (!model.title && !model.subtitle) return '';
-  return '<tr><td align="center" bgcolor="' + c.accentColor + '" style="background:' + c.accentColor +
-    ';border-radius:4px 4px 0 0;padding:56px 24px 44px 24px;text-align:center;">' +
-    (model.title ? '<h1 class="nl-banner-title" style="margin:0;font-family:' + c.headingFont +
-      ';font-size:52px;line-height:1.05;font-weight:bold;color:' + c.accentTextColor + ';">' + ctx.tx(nlEsc_(model.title)) + '</h1>' : '') +
-    (model.subtitle ? '<p style="margin:18px 0 0 0;font-family:' + c.bodyFont + ';font-size:17px;letter-spacing:0.08em;text-transform:uppercase;color:#ffffff;">' +
-      ctx.tx(nlEsc_(model.subtitle)) + '</p>' : '') +
-    '</td></tr>';
+  return ctx.render('header', {
+    title: model.title ? ctx.tx(nlEsc_(model.title)) : '',
+    subtitle: model.subtitle ? ctx.tx(nlEsc_(model.subtitle)) : ''
+  });
 }
 
 function nlFooterRow_(ctx) {
   var c = ctx.c;
   if (!c.footerName && !c.footerTagline) return '';
-  var logo = c.footerLogoUrl
-    ? '<td valign="middle" width="64" style="padding-right:12px;"><img src="' + nlEsc_(c.footerLogoUrl) + '" width="52" alt="' + nlEsc_(c.footerName) + '" style="display:block;"></td>'
-    : '';
-  return '<tr><td bgcolor="' + c.accentColor + '" style="background:' + c.accentColor + ';border-radius:0 0 4px 4px;padding:16px 20px;">' +
-    '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0!important;"><tr>' + logo +
-    '<td valign="middle" style="text-align:' + ctx.start + ';">' +
-    (c.footerName ? '<div style="font-family:' + c.bodyFont + ';font-size:18px;font-weight:bold;line-height:1.2;color:' + c.accentTextColor + ';">' + nlEsc_(c.footerName) + '</div>' : '') +
-    (c.footerTagline ? '<div style="font-family:' + c.bodyFont + ';font-size:13px;line-height:1.4;color:' + c.accentTextColor + ';">' + nlEsc_(c.footerTagline) + '</div>' : '') +
-    '</td></tr></table></td></tr>';
+  return ctx.render('footer', { name: c.footerName, tagline: c.footerTagline, logoUrl: nlSafeUrl_(c.footerLogoUrl) });
 }
 
 /**
@@ -601,34 +519,28 @@ function nlGroupBlocks_(blocks, c) {
 }
 
 function nlRenderGroup_(g, ctx) {
-  var c = ctx.c;
   switch (g.type) {
     case 'heading': return nlHeadingRow_(g, ctx);
-    case 'rich':
-      return '<tr><td class="nl-box" align="' + ctx.start + '" valign="top" style="padding:5px 20px 20px 20px;">' +
-        '<div class="nl-rich" style="' + ctx.pStyle + 'text-align:' + ctx.start + ';">' + ctx.tx(nlRenderRich_(g.blocks, ctx)) + '</div></td></tr>';
-    case 'divider':
-      return '<tr><td class="nl-box" style="padding:20px 20px 20px 20px;">' +
-        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0"><tr>' +
-        '<td style="border-top:2px solid ' + c.accentColor + ';font-size:1px;line-height:1px;height:1px;">&nbsp;</td></tr></table></td></tr>';
+    case 'rich': return ctx.render('rich', { html: ctx.tx(nlRenderRich_(g.blocks, ctx)) });
+    case 'divider': return ctx.render('divider', {});
     case 'image': return nlImageRow_(g, ctx);
     case 'attachment': return nlAttachmentRow_(g, ctx);
-    case 'table':
-      return '<tr><td class="nl-box" style="padding:10px 20px 20px 20px;">' + nlRenderTable_(g, ctx) + '</td></tr>';
+    case 'table': return ctx.render('table', { html: nlRenderTable_(g, ctx) });
     default: return '';
   }
 }
 
 function nlHeadingRow_(h, ctx) {
-  var c = ctx.c;
-  var align = h.align && h.align !== 'justify' ? h.align : c.headingAlign;
-  var size = h.level === 1 ? 26 : h.level === 2 ? 20 : 17;
-  var tag = h.level === 1 ? 'h2' : h.level === 2 ? 'h3' : 'h4';
-  var pad = h.level === 1 ? '20px 20px 6px 20px' : '14px 20px 4px 20px';
-  return '<tr><td class="nl-box" align="' + align + '" valign="top" style="padding:' + pad + ';">' +
-    '<' + tag + (h.level === 1 ? ' class="nl-h1"' : '') + ' style="margin:0;font-family:' + c.headingFont + ';font-size:' + size +
-    'px;line-height:1.25;font-weight:bold;color:' + c.textColor + ';text-align:' + align + ';">' +
-    ctx.tx(nlRenderRuns_(h.runs, ctx)) + '</' + tag + '></td></tr>';
+  var t = ctx.t;
+  return ctx.render('heading', {
+    level: h.level,
+    tag: h.level === 1 ? 'h2' : h.level === 2 ? 'h3' : 'h4',
+    isH1: h.level === 1,
+    size: h.level === 1 ? t.h1Size : h.level === 2 ? t.h2Size : t.h3Size,
+    padding: h.level === 1 ? t.h1Padding : t.headingPadding,
+    align: h.align && h.align !== 'justify' ? h.align : ctx.c.headingAlign,
+    html: ctx.tx(nlRenderRuns_(h.runs, ctx))
+  });
 }
 
 function nlRenderRich_(blocks, ctx) {
@@ -653,13 +565,15 @@ function nlRenderList_(items, ctx) {
     stack[stack.length - 1].children.push(node);
     stack.push(node);
   });
+  var t = ctx.t;
+  var indent = ctx.rtl ? '0 ' + t.listIndent + ' 0 0' : '0 0 0 ' + t.listIndent;
   function render(nodes) {
     if (!nodes.length) return '';
     var first = nodes[0].item;
     var tag = first.ordered ? 'ol' : 'ul';
     var start = first.ordered && first.number > 1 ? ' start="' + first.number + '"' : '';
-    return '<' + tag + start + ' style="margin:0;padding:' + (ctx.rtl ? '0 1.6em 0 0' : '0 0 0 1.6em') + ';list-style-type:' + first.listStyle + ';font-family:' +
-      ctx.c.bodyFont + ';font-size:15px;line-height:1.5;color:' + ctx.c.textColor + ';">' +
+    return '<' + tag + start + ' style="margin:0;padding:' + indent + ';list-style-type:' + first.listStyle + ';font-family:' +
+      ctx.c.bodyFont + ';font-size:' + t.bodySize + 'px;line-height:' + t.lineHeight + ';color:' + ctx.c.textColor + ';">' +
       nodes.map(function (n) {
         return '<li style="margin:0;">' + nlRenderRuns_(n.item.runs, ctx) + render(n.children) + '</li>';
       }).join('') + '</' + tag + '>';
@@ -688,23 +602,13 @@ function nlRenderRuns_(runs, ctx) {
 function nlImageRow_(img, ctx) {
   var src = ctx.resolve(img);
   if (!src) return '';
-  var full = !img.widthPt || img.widthPt >= NL_DOC_CONTENT_WIDTH_PT * 0.85;
-  var tag;
-  var alt = nlEsc_(ctx.txText(img.alt));
-  var href = nlSafeUrl_(img.link);
-  if (full) {
-    tag = '<img src="' + nlEsc_(src) + '" width="' + NL_EMAIL_WIDTH + '" alt="' + alt + '" ' +
-      'style="display:block;width:100%;max-width:' + NL_EMAIL_WIDTH + 'px;height:auto;">';
-    if (href) tag = '<a href="' + nlEsc_(href) + '" target="_blank">' + tag + '</a>';
-    return '<tr><td align="center" valign="top">' + tag + '</td></tr>';
-  }
-  var w = Math.min(NL_EMAIL_WIDTH - 40, Math.round(img.widthPt * NL_EMAIL_WIDTH / NL_DOC_CONTENT_WIDTH_PT));
-  var h = img.heightPt ? Math.round(img.heightPt * w / img.widthPt) : 0;
-  tag = '<img class="nl-img-sized" src="' + nlEsc_(src) + '" width="' + w + '"' + (h ? ' height="' + h + '"' : '') +
-    ' alt="' + alt + '" style="display:inline-block;width:' + w + 'px;max-width:100%;height:auto;">';
-  if (href) tag = '<a href="' + nlEsc_(href) + '" target="_blank">' + tag + '</a>';
-  var align = img.align === 'right' ? 'right' : img.align === '' ? ctx.start : img.align === 'justify' ? 'center' : img.align;
-  return '<tr><td class="nl-box" align="' + align + '" valign="top" style="padding:10px 20px 10px 20px;text-align:' + align + ';">' + tag + '</td></tr>';
+  var width = ctx.t.width;
+  var data = { src: src, alt: ctx.txText(img.alt), href: nlSafeUrl_(img.link) };
+  if (!img.widthPt || img.widthPt >= NL_DOC_CONTENT_WIDTH_PT * 0.85) return ctx.render('image', data);
+  data.width = Math.min(width - 40, Math.round(img.widthPt * width / NL_DOC_CONTENT_WIDTH_PT));
+  data.height = img.heightPt ? Math.round(img.heightPt * data.width / img.widthPt) : 0;
+  data.align = img.align === 'right' ? 'right' : img.align === '' ? ctx.start : img.align === 'justify' ? 'center' : img.align;
+  return ctx.render('imageSized', data);
 }
 
 function nlFileKind_(att) {
@@ -727,28 +631,21 @@ function nlFormatSize_(bytes) {
 }
 
 function nlAttachmentRow_(att, ctx) {
-  var c = ctx.c;
-  var href = nlEsc_(nlSafeUrl_(att.url));
   var kind = nlFileKind_(att);
-  var native = /^(DOC|SHEET|SLIDES|FORM)$/.test(kind);
-  var size = nlFormatSize_(att.size);
-  return '<tr><td class="nl-box" style="padding:10px 20px 10px 20px;">' +
-    '<a href="' + href + '" target="_blank" style="text-decoration:none;color:' + c.textColor + ';display:block;">' +
-    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border:1px solid #cccccc;border-radius:6px;border-collapse:separate;background:#ffffff;">' +
-    '<tr><td width="52" valign="middle" style="padding:12px 0 12px 12px;">' +
-    '<div style="width:40px;height:44px;line-height:44px;border-radius:4px;background:' + c.accentColor + ';color:#ffffff;' +
-    'font-family:Arial,sans-serif;font-size:' + (kind.length > 4 ? 9 : 11) + 'px;font-weight:bold;text-align:center;">' + nlEsc_(kind) + '</div></td>' +
-    '<td valign="middle" style="padding:12px;font-family:' + c.bodyFont + ';font-size:15px;line-height:1.4;font-weight:bold;color:' + c.textColor + ';word-break:break-word;">' +
-    ctx.tx(nlEsc_(att.title)) + '</td>' +
-    '<td width="90" align="center" valign="middle" style="padding:12px 12px 12px 0;font-family:' + c.bodyFont + ';">' +
-    '<div style="font-size:14px;font-weight:bold;color:' + c.linkColor + ';text-decoration:underline;">' + ctx.tx(native ? 'Open' : 'Download') + '</div>' +
-    (size ? '<div style="font-size:12px;color:#aaaaaa;">' + nlEsc_(size) + '</div>' : '') +
-    '</td></tr></table></a></td></tr>';
+  return ctx.render('attachment', {
+    href: nlSafeUrl_(att.url),
+    kind: kind,
+    kindSize: kind.length > 4 ? 9 : 11,
+    title: ctx.tx(nlEsc_(att.title)),
+    action: ctx.tx(/^(DOC|SHEET|SLIDES|FORM)$/.test(kind) ? 'Open' : 'Download'),
+    size: nlFormatSize_(att.size)
+  });
 }
 
-function nlRenderTable_(t, ctx) {
+function nlRenderTable_(table, ctx) {
+  var t = ctx.t;
   return '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">' +
-    t.rows.map(function (row) {
+    table.rows.map(function (row) {
       return '<tr>' + row.map(function (cell) {
         var bg = cell.background ? 'background:' + cell.background + ';' : '';
         var inner = cell.blocks.map(function (b) {
@@ -762,8 +659,8 @@ function nlRenderTable_(t, ctx) {
           }
           return nlRenderRich_([b], ctx);
         }).join('');
-        return '<td class="nl-rich" valign="top" style="border:1px solid #dddddd;padding:8px;text-align:' + ctx.start + ';' + bg + '">' +
-          (inner ? ctx.tx(inner) : '&nbsp;') + '</td>';
+        return '<td class="nl-rich" valign="top" style="border:1px solid ' + t.tableBorder + ';padding:' + t.tableCellPadding +
+          ';text-align:' + ctx.start + ';' + bg + '">' + (inner ? ctx.tx(inner) : '&nbsp;') + '</td>';
       }).join('') + '</tr>';
     }).join('') + '</table>';
 }

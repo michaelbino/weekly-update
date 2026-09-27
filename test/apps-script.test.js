@@ -7,10 +7,10 @@ const vm = require('node:vm');
 const crypto = require('node:crypto');
 const fixture = require('./fixtures/template-doc.json');
 
-const SRC = ['Config.js', 'Newsletter.js', 'WebApp.js', 'Code.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'apps-script', f), 'utf8'));
+const SRC = ['Config.js', 'Layout.js', 'Theme.js', 'Newsletter.js', 'WebApp.js', 'Code.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'apps-script', f), 'utf8'));
 
 function makeEnv(opts = {}) {
-  const calls = { translations: [], templates: [], snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
+  const calls = { logs: [], translations: [], templates: [], snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
   const files = {}; // name -> content in the Doc's folder
   const ANYONE = 'ANYONE_WITH_LINK';
   let fileSeq = 0;
@@ -104,6 +104,7 @@ function makeEnv(opts = {}) {
     PropertiesService: { getDocumentProperties: () => ({ getProperty: (k) => docProps[k] || null, setProperty: (k, v) => { docProps[k] = v; } }) },
     UrlFetchApp: { fetch: () => ({ getResponseCode: () => 200, getBlob: () => blob('image/jpeg') }) },
     ScriptApp: { getOAuthToken: () => 'tok' },
+    Logger: { log: (m) => calls.logs.push(m) },
     LanguageApp: {
       translate: (html, src, lang, args) => {
         calls.translations.push({ lang, src, args });
@@ -138,6 +139,7 @@ function makeEnv(opts = {}) {
   };
   vm.createContext(ctx);
   SRC.forEach((s) => vm.runInContext(s, ctx));
+  if (opts.theme) vm.runInContext('NEWSLETTER_THEME = ' + JSON.stringify(opts.theme) + ';', ctx);
   if (opts.deployment !== false) {
     vm.runInContext("var NEWSLETTER_DEPLOYMENT = { webAppUrl: 'https://script.google.com/macros/s/DEP/exec', snapshotFolderId: 'SNAPFOLDER' };", ctx);
   }
@@ -368,4 +370,29 @@ test('translation is off with an empty language list, and never runs before publ
   unpublished.ctx.sendPreviewToMe();
   assert.equal(unpublished.calls.translations.length, 0);
   assert.ok(!unpublished.calls.mail[0][3].htmlBody.includes('&#127760;'), 'no language row without web pages');
+});
+
+
+/* ---------------- theme checks in the browser ---------------- */
+
+test('checkTheme (run from the Apps Script editor) logs OK for the shipped theme', () => {
+  const { ctx, calls } = makeEnv();
+  assert.deepEqual(Array.from(ctx.checkTheme()), []);
+  assert.deepEqual(calls.logs, ['Theme OK']);
+});
+
+test('theme mistakes are reported by checkTheme and shown in Preview and send alerts', () => {
+  const { ctx, calls } = makeEnv({ theme: { tokens: { h1Szie: 30 }, templates: {} } });
+  const problems = Array.from(ctx.checkTheme());
+  assert.deepEqual(problems, ['Unknown token "h1Szie". Did you mean "h1Size"?']);
+  assert.match(calls.logs[0], /Theme problems:\n- Unknown token "h1Szie"/);
+  ctx.showPreview();
+  assert.ok(calls.templates.find((t) => t.name === 'Preview').warnings.some((w) => /Theme: Unknown token "h1Szie"/.test(w)));
+  ctx.sendPreviewToMe();
+  assert.match(calls.alerts[0][1], /Theme: Unknown token "h1Szie"/);
+});
+
+test('checkTheme reports templates that fail at render time', () => {
+  const { ctx } = makeEnv({ theme: { templates: { footer: '{{#name}}unclosed' } } });
+  assert.match(Array.from(ctx.checkTheme())[0], /Template "footer": Template section \{\{#name\}\} is never closed/);
 });

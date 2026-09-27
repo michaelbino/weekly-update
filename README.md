@@ -52,9 +52,20 @@ Once an issue's web version is published, each language in **Settings › Transl
 - Text inside images (flyers) is not translated, only alt text. Put key dates, times and costs in the Doc text too.
 - Translation runs on Publish and each Send preview, so the first publish takes longer.
 
+### Customizing the layout
+
+Beyond the Settings sidebar, maintainers can restyle and restructure the email in `apps-script/Theme.js`:
+- **Design tokens** set sizes, spacing, radii, borders, divider style and the phone breakpoint.
+- **Block templates** replace the HTML of the header band, headings, dividers, images, download cards, footer or top bar.
+- **Extension points** add rows (`cardTop` / `cardBottom`), and extra CSS can go in the theme too.
+
+`npm run preview` live-reloads the result, and `npm run check-theme` catches typos. In the browser, **Newsletter › Preview** shows your theme after each save, and running `checkTheme` in the Apps Script editor validates it ([details](docs/WEB-SETUP.md#5-theme-in-the-browser)). There are three ready-made examples in `examples/themes/`. The full guide, with every token and template, is **[docs/THEMING.md](docs/THEMING.md)**.
+
 **Newsletter › Settings…** changes the sender name, reply-to, subject override, preview text, colours, background photo, footer and small print. Settings are saved to `Newsletter settings.json` next to the Doc, so every issue in that folder shares them. Brand defaults live in `apps-script/Config.js`.
 
 ## Setup (maintainer)
+
+**Prefer Google's web interfaces?** Everything below can be done in Drive, Docs and the Apps Script editor, with no command-line tools. See **[docs/WEB-SETUP.md](docs/WEB-SETUP.md)** for the browser equivalent of each script.
 
 Requirements: [mise](https://mise.jdx.dev) or Node 20, Docker, and [`gws`](https://github.com/googleworkspace/cli) authenticated with the Drive, Docs, Apps Script and Gmail scopes:
 
@@ -94,13 +105,15 @@ node cli/newsletter.mjs send   --doc <doc-url-or-id> [--to you@example.com]   # 
 ## Layout
 
 ```
-apps-script/   Config.js (brand defaults), Newsletter.js (pure engine), Code.js (Docs/Drive/Mail glue),
+apps-script/   Config.js (brand defaults), Theme.js (your layout overrides), Layout.js (layout framework: tokens,
+               templates, engine), Newsletter.js (pure engine), Code.js (Docs/Drive/Mail glue),
                WebApp.js (web version: snapshots + doGet), Deployment.js (generated, gitignored),
                Preview/Settings/Help.html, appsscript.json
 cli/           newsletter.mjs (render/send/seed), mime.mjs, seed.mjs, gws.mjs
 template/      weekly-update.html (seed content from example.eml), placeholder-attachment.pdf
 test/          node:test suites; fixtures are real Docs API responses of the template
-docs/          GitHub Pages site (index.html + screenshots)
+docs/          GitHub Pages site (index.html + screenshots) and THEMING.md
+examples/      example themes (rounded, masthead-left, social-footer)
 ```
 
 `Newsletter.js` uses no Google services, so the tests load it directly in Node. They run `Code.js` in a VM with mocked `DocumentApp`, `DriveApp`, `MailApp` and the other services it calls.

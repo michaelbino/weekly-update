@@ -65,7 +65,7 @@
 
   /* Figures */
   figure { margin: 0; }
-  .steps > *, .compare > *, .trio > *, .menu-grid > *, .ui-shots > *, .formats > *, .split > *, .hero-shots > * { min-width: 0; }
+  .steps > *, .compare > *, .trio > *, .three > *, .menu-grid > *, .ui-shots > *, .formats > *, .split > *, .hero-shots > * { min-width: 0; }
   .shot { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); overflow: hidden; }
   .shot img { width: 100%; }
   figcaption { font-size: 14px; color: var(--muted); margin-top: 10px; }
@@ -73,6 +73,7 @@
   .compare .label { font: 600 13px/1 var(--sans); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
   .tall img { max-height: 760px; object-fit: cover; object-position: top; }
   .trio { display: grid; grid-template-columns: 1.3fr .8fr 1.3fr; gap: 24px; margin-top: 28px; align-items: start; }
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin: 28px 0 22px; align-items: start; }
 
   /* Mapping table */
   table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 16px; background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid var(--line); }
@@ -130,7 +131,7 @@
   @media (max-width: 640px) {
     body { font-size: 16px; }
     section { padding: 48px 0; }
-    .hero-shots, .compare, .formats, .split, .steps, .trio, .ui-shots { grid-template-columns: 1fr; }
+    .hero-shots, .compare, .formats, .split, .steps, .trio, .three, .ui-shots { grid-template-columns: 1fr; }
     .hero-shots figure:last-child { display: none; }
     .hero-shots img { height: 260px; }
     td:first-child { width: auto; }
@@ -258,13 +259,32 @@
 
     <div class="ui-shots">
       <figure><div class="shot"><img src="img/dialog-preview.jpg" width="1100" height="853" loading="lazy" alt="Preview dialog with Desktop, Phone, Copy HTML and Send preview to me buttons above the rendered newsletter"></div><figcaption>Preview dialog</figcaption></figure>
-      <figure><div class="shot"><img src="img/sidebar-settings.jpg" width="420" height="1378" loading="lazy" alt="Settings sidebar with Email, Look and Footer fields and colour pickers"></div><figcaption>Settings sidebar</figcaption></figure>
+      <figure><div class="shot"><img src="img/sidebar-settings.jpg" width="420" height="1509" loading="lazy" alt="Settings sidebar with Email, Translation, Look and Footer fields and colour pickers"></div><figcaption>Settings sidebar</figcaption></figure>
       <div class="stack">
         <figure><div class="shot"><img src="img/dialog-published.png" width="600" height="240" loading="lazy" alt="Published dialog with Open web version and Copy link buttons"></div><figcaption>After publishing</figcaption></figure>
-        <figure><div class="shot"><img src="img/sidebar-help.jpg" width="420" height="1378" loading="lazy" alt="Help sidebar listing the weekly steps and how Doc styles map to the email"></div><figcaption>Help sidebar</figcaption></figure>
+        <figure><div class="shot"><img src="img/sidebar-help.jpg" width="420" height="1568" loading="lazy" alt="Help sidebar listing the weekly steps and how Doc styles map to the email"></div><figcaption>Help sidebar</figcaption></figure>
       </div>
     </div>
     <p class="gmenu-note" style="margin-top:14px">The dialogs and sidebars are the script's own HTML templates, rendered outside Google Docs, so Google's window frame is missing.</p>
+  </div>
+</section>
+
+<section id="theming">
+  <div class="wrap">
+    <div class="kicker">Make it yours</div>
+    <h2>Change the layout, not just the colours</h2>
+    <p class="lede">Editors handle colours, fonts and footer text in Settings. Maintainers can go further in one file, <code>apps-script/Theme.js</code>: override <b>design tokens</b> for size, spacing, corners and dividers, replace any block's <b>HTML template</b>, or add rows above or below the content.</p>
+    <div class="three">
+      <figure><div class="shot"><img src="img/themes/default.jpg" width="760" height="665" loading="lazy" alt="Default theme: centred header band and centred headings"></div><figcaption>Default</figcaption></figure>
+      <figure><div class="shot"><img src="img/themes/rounded.jpg" width="760" height="665" loading="lazy" alt="Rounded theme: 16px card corners, tighter header, dotted dividers"></div><figcaption><code>rounded.js</code>: ten tokens, no HTML</figcaption></figure>
+      <figure><div class="shot"><img src="img/themes/masthead-left.jpg" width="760" height="665" loading="lazy" alt="Left masthead theme: left-aligned title with accent rule, dark date strip, left-aligned headings"></div><figcaption><code>masthead-left.js</code>: two templates replaced</figcaption></figure>
+    </div>
+<pre>var NEWSLETTER_THEME = {
+  tokens:    { cardRadius: '16px', h1Size: 24, dividerStyle: 'dotted' },
+  templates: { cardBottom: '&lt;tr&gt;&lt;td class="nl-box" align="center"&gt;…links…&lt;/td&gt;&lt;/tr&gt;' },
+  css:       '.nl-pill a{border-radius:999px}'
+};</pre>
+    <p><code>npm run preview</code> re-renders the sample issue on every save, <code>npm run check-theme</code> catches typos ("Did you mean <code>h1Size</code>?") and broken templates, and CI checks the theme on every push. Prefer the browser? Edit <b>Theme</b> in the Apps Script editor and watch <b>Newsletter › Preview</b>. The <a href="https://github.com/michaelbino/weekly-update/blob/main/docs/THEMING.md">theming guide</a> lists every token and template, with email-safe recipes.</p>
   </div>
 </section>
 
@@ -285,6 +305,8 @@
         <h3>Translated web pages</h3>
         <p>For each language in Settings (by default Español, 中文, 한국어, Kreyòl ayisyen and العربية), Google Translate produces a copy of the web page. A 🌐 row at the top of the email and every page links them all.</p>
         <p>Right-to-left languages get right-to-left layout. Each page carries a machine-translation notice with a link back to the English original. Translation uses Apps Script's built-in Google Translate: no API key and no billing. Text inside flyer images isn't translated.</p>
+        <figure style="margin-top:14px"><div class="shot"><img src="img/web-arabic.jpg" width="800" height="1040" loading="lazy" alt="The live Arabic web version: right-to-left layout, translated header and headings, a machine-translation notice at the top and the language row"></div>
+        <figcaption>The live Arabic page for the sample issue. The flyer's English text stays as it is.</figcaption></figure>
       </div>
       <div class="card">
         <h3>Plain-text alternative</h3>
@@ -359,6 +381,7 @@ scripts/create-template.zsh   # Drive folder, seeded template Doc, bound script,
 scripts/deploy-script.zsh     # push script changes and redeploy the web app
 scripts/test.zsh              # test suite in Docker
 scripts/teardown.zsh          # move the template folder to the trash</pre>
+    <p><b>No command line?</b> Every step also works in Drive, Docs and the Apps Script editor: copy-paste the script files, deploy the web app from the editor's <b>Deploy</b> menu, and validate a theme by running <code>checkTheme</code>. The <a href="https://github.com/michaelbino/weekly-update/blob/main/docs/WEB-SETUP.md">browser setup guide</a> walks through it.</p>
     <p>Then open the template Doc, reload it, and use the <b>Newsletter</b> menu. Google asks you to authorize the script the first time. Brand defaults live in <code>apps-script/Config.js</code>. The <a href="https://github.com/michaelbino/weekly-update#readme">README</a> covers the rest.</p>
   </div>
 </section>

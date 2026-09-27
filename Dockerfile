@@ -6,5 +6,7 @@ COPY apps-script ./apps-script
 COPY cli ./cli
 COPY template ./template
 COPY test ./test
+COPY examples ./examples
+COPY docs/*.md ./docs/
 USER node
 CMD ["npm", "test"]
