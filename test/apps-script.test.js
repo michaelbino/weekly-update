@@ -9,7 +9,7 @@ const fixture = require('./fixtures/template-doc.json');
 const SRC = ['Config.js', 'Newsletter.js', 'WebApp.js', 'Code.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', 'apps-script', f), 'utf8'));
 
 function makeEnv(opts = {}) {
-  const calls = { snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
+  const calls = { templates: [], snapshots: [], served: [], mail: [], alerts: [], dialogs: [], created: [], shared: [], revUpdates: [], copies: [], prompts: [] };
   const files = {}; // name -> content in the Doc's folder
   const ANYONE = 'ANYONE_WITH_LINK';
   let fileSeq = 0;
@@ -103,7 +103,11 @@ function makeEnv(opts = {}) {
       formatDate: (d, tz, f) => (f === 'M/d' ? `${d.getMonth() + 1}/${d.getDate()}` : `F:${d.toISOString().slice(0, 10)}`),
     },
     HtmlService: {
-      createTemplateFromFile: () => ({ evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; }, setTitle() { return this; } }) }),
+      createTemplateFromFile: (name) => {
+        const t = { name, evaluate: () => ({ setWidth() { return this; }, setHeight() { return this; }, setTitle() { return this; } }) };
+        calls.templates.push(t);
+        return t;
+      },
       createHtmlOutput: (content) => {
         const out = { content, setWidth() { return out; }, setHeight() { return out; },
           setTitle(t) { out.title = t; return out; }, addMetaTag(n, v) { out.meta = [n, v]; return out; } };
@@ -159,6 +163,7 @@ test('without a web app deployment, publish falls back to publishing the Doc', (
   ctx.publishWebVersion();
   assert.deepEqual(JSON.parse(JSON.stringify(calls.revUpdates[0])), { res: { published: true, publishAuto: true, publishedOutsideDomain: true }, id: 'DOC1', rev: '7' });
   assert.equal(docProps.publishedUrl, 'https://docs.google.com/document/d/e/PUB/pub');
+  assert.equal(calls.templates.find((t) => t.name === 'LinkDialog').url, 'https://docs.google.com/document/d/e/PUB/pub');
   ctx.sendPreviewToMe();
   assert.match(calls.mail[0][3].htmlBody, /href="https:\/\/docs.google.com\/document\/d\/e\/PUB\/pub"/);
 });
@@ -178,7 +183,10 @@ test('publish writes an email-look snapshot and the email links to the web app',
   const snapId = calls.snapshots[0];
   assert.equal(docProps.snapshotFileId, snapId);
   const url = 'https://script.google.com/macros/s/DEP/exec?issue=' + snapId;
-  assert.match(calls.alerts[1][1], new RegExp('Web version: ' + url.replace(/[?.]/g, '\\$&')));
+  const dialog = calls.templates.find((t) => t.name === 'LinkDialog');
+  assert.equal(dialog.url, url);
+  assert.equal(dialog.label, 'Open web version');
+  assert.deepEqual(calls.dialogs, ['Published']);
 
   const snap = ctx.DriveApp.getFileById(snapId);
   assert.match(snap.content, /class="nl-banner-title"/, 'snapshot is the rendered email');
@@ -187,7 +195,7 @@ test('publish writes an email-look snapshot and the email links to the web app',
 
   ctx.sendPreviewToMe();
   assert.ok(calls.mail[0][3].htmlBody.includes('href="' + url + '"'), 'View in browser points at the snapshot');
-  assert.ok(!/not published yet/.test(calls.alerts[2][1]));
+  assert.ok(!/not published yet/.test(calls.alerts[1][1]));
   assert.equal(calls.snapshots.length, 1, 'republishing reuses the same file and link');
 });
 
@@ -252,6 +260,9 @@ test('start next issue copies the Doc with next Monday in the name and date', ()
   assert.match(calls.copies[0], /^Weekly Update - Week of \d{1,2}\/\d{1,2}$/);
   assert.match(calls.subtitle, /^F:\d{4}-\d{2}-\d{2}$/);
   assert.deepEqual(calls.dialogs, ['Next issue ready']);
+  const dialog = calls.templates.find((t) => t.name === 'LinkDialog');
+  assert.equal(dialog.url, 'https://docs.google.com/document/d/copy1/edit');
+  assert.equal(dialog.label, 'Open the new issue');
 });
 
 test('nextMonday_ always moves forward to a Monday', () => {

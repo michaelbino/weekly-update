@@ -75,16 +75,34 @@ function publishWebVersion() {
   if (ok !== ui.Button.YES) return;
 
   var url;
-  var notes = '';
+  var warnings = [];
   if (dep) {
     nlEnsureSnapshot_(DocumentApp.getActiveDocument().getName());
     var built = buildNewsletter_({});
     url = built.viewInBrowserUrl;
-    if (built.warnings.length) notes = '\n\n' + built.warnings.join('\n');
+    warnings = built.warnings;
   } else {
     url = publishDoc_(DocumentApp.getActiveDocument().getId());
   }
-  ui.alert('Published', 'Web version: ' + url + notes, ui.ButtonSet.OK);
+  showLinkDialog_('Published', {
+    message: 'The web version is live. This is where "View in browser" in the email goes.',
+    url: url,
+    label: 'Open web version',
+    warnings: warnings,
+    note: dep ? 'Each "Send preview" refreshes this page. The link stays the same.' : ''
+  });
+}
+
+/** Modal with a primary "open" button, copy-link button and optional warnings. */
+function showLinkDialog_(title, opts) {
+  var t = HtmlService.createTemplateFromFile('LinkDialog');
+  t.message = opts.message;
+  t.url = opts.url;
+  t.label = opts.label;
+  t.warnings = opts.warnings || [];
+  t.note = opts.note || '';
+  var height = 170 + t.warnings.length * 56 + (t.note ? 24 : 0);
+  DocumentApp.getUi().showModalDialog(t.evaluate().setWidth(460).setHeight(height), title);
 }
 
 function startNextIssue() {
@@ -115,12 +133,12 @@ function startNextIssue() {
     }
   }
 
-  var html = HtmlService.createHtmlOutput(
-    '<p style="font-family:Arial,sans-serif">Created <b>' + nlEsc_(name) + '</b>.</p>' +
-    '<p style="font-family:Arial,sans-serif"><a href="' + copy.getUrl() + '" target="_blank">Open the new issue</a></p>' +
-    '<p style="font-family:Arial,sans-serif;color:#666;font-size:12px">The first time you use the Newsletter menu in the new copy, ' +
-    'Google will ask you to authorize it once.</p>').setWidth(420).setHeight(170);
-  ui.showModalDialog(html, 'Next issue ready');
+  showLinkDialog_('Next issue ready', {
+    message: 'Created "' + name + '".',
+    url: copy.getUrl(),
+    label: 'Open the new issue',
+    note: 'The first time you use the Newsletter menu in the new copy, Google will ask you to authorize it once.'
+  });
 }
 
 function showSettings() {

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_blank">
+<style>
+  body { margin: 0; padding: 4px 2px; font-family: Arial, sans-serif; font-size: 13px; color: #222; }
+  p { margin: 0 0 12px; line-height: 1.45; }
+  .actions { display: flex; gap: 8px; margin: 4px 0 12px; }
+  .btn { display: inline-block; padding: 8px 16px; border-radius: 4px; font: bold 13px Arial, sans-serif; text-decoration: none; cursor: pointer; border: 1px solid #1a73e8; }
+  .primary { background: #1a73e8; color: #fff; }
+  .secondary { background: #fff; color: #1a73e8; }
+  .url { font-size: 11px; color: #666; word-break: break-all; }
+  .warn { background: #fff4e5; border: 1px solid #f0c36d; border-radius: 4px; padding: 6px 10px; margin-top: 10px; }
+  .note { color: #666; font-size: 12px; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <p><?= message ?></p>
+  <div class="actions">
+    <a class="btn primary" href="<?= url ?>" target="_blank" rel="noopener"><?= label ?></a>
+    <button class="btn secondary" type="button" onclick="copyLink(this)">Copy link</button>
+  </div>
+  <div class="url" id="url"><?= url ?></div>
+  <? for (var i = 0; i < warnings.length; i++) { ?>
+    <div class="warn"><?= warnings[i] ?></div>
+  <? } ?>
+  <? if (note) { ?><div class="note"><?= note ?></div><? } ?>
+<script>
+  function copyLink(btn) {
+    var text = document.getElementById('url').textContent;
+    function done() { btn.textContent = 'Copied'; setTimeout(function () { btn.textContent = 'Copy link'; }, 1500); }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(done, fallback);
+    } else {
+      fallback();
+    }
+    function fallback() {
+      var t = document.createElement('textarea');
+      t.value = text; document.body.appendChild(t); t.select();
+      document.execCommand('copy'); t.remove(); done();
+    }
+  }
+</script>
+</body>
+</html>
